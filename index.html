@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Officer Control Panel</title>
+    <!-- 1. Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Add custom text-shadow utility for neon glow effect
+        tailwind.config = {
+            theme: {
+                extend: {
+                    textShadow: {
+                        'cyan': '0 0 8px rgba(0, 255, 255, 0.7)',
+                        'fuchsia': '0 0 8px rgba(217, 70, 239, 0.7)',
+                    },
+                    boxShadow: {
+                        'cyan-glow': '0 0 15px rgba(0, 255, 255, 0.5), 0 0 20px rgba(0, 255, 255, 0.3) inset',
+                        'fuchsia-glow': '0 0 15px rgba(217, 70, 239, 0.5), 0 0 20px rgba(217, 70, 239, 0.3) inset',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- 2. React Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 3. Babel to transpile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Share Tech Mono', monospace;
+            background-color: #0a0a0a;
+            background-image: 
+                linear-gradient(rgba(13, 110, 253, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(13, 110, 253, 0.1) 1px, transparent 1px);
+            background-size: 2rem 2rem;
+            background-position: -1px -1px;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        @keyframes cyan-glow-pulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(0, 255, 255, 0.5), 0 0 20px rgba(0, 255, 255, 0.3) inset; }
+            50% { box-shadow: 0 0 25px rgba(0, 255, 255, 0.8), 0 0 30px rgba(0, 255, 255, 0.5) inset; }
+        }
+        @keyframes fuchsia-glow-pulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(217, 70, 239, 0.5), 0 0 20px rgba(217, 70, 239, 0.3) inset; }
+            50% { box-shadow: 0 0 25px rgba(217, 70, 239, 0.8), 0 0 30px rgba(217, 70, 239, 0.5) inset; }
+        }
+        @keyframes text-cyan-glow-pulse {
+            0%, 100% { text-shadow: 0 0 8px rgba(0, 255, 255, 0.7); }
+            50% { text-shadow: 0 0 16px rgba(0, 255, 255, 1); }
+        }
+        @keyframes text-fuchsia-glow-pulse {
+            0%, 100% { text-shadow: 0 0 8px rgba(217, 70, 239, 0.7); }
+            50% { text-shadow: 0 0 16px rgba(217, 70, 239, 1); }
+        }
+        @keyframes pulse-red {
+            50% { box-shadow: 0 0 20px #ef4444; }
+        }
+        @keyframes pulse-cyan {
+            50% { box-shadow: 0 0 20px #22d3ee; }
+        }
+        @keyframes pulse-yellow {
+            50% { box-shadow: 0 0 20px #fde047; }
+        }
+    </style>
+</head>
+<body class="text-gray-200">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const CLIMATE_API_BASE_URL = 'http://127.0.0.1:5000';
+        const PARKING_API_BASE_URL = 'http://127.0.0.1:5001/api/parking';
+
+        // --- Climate Control Component ---
+        const ClimatePanel = () => {
+            const [status, setStatus] = React.useState(null);
+            const [loading, setLoading] = React.useState(true);
+            const [error, setError] = React.useState(null);
+            const [tempInput, setTempInput] = React.useState("");
+
+            const fetchStatus = async () => {
+                try {
+                    const response = await fetch(`${CLIMATE_API_BASE_URL}/status`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    setStatus(data);
+                    if (document.activeElement.id !== 'temp-input') {
+                        setTempInput(data.temperature);
+                    }
+                    setError(null); // Clear previous errors on successful fetch
+                } catch (e) {
+                    setError(`Climate API Error: ${e.message}. Is the climate server running?`);
+                    console.error(e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            React.useEffect(() => {
+                fetchStatus();
+                const interval = setInterval(fetchStatus, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const sendControlCommand = async (action, value) => {
+                try {
+                    setError(null);
+                    const response = await fetch(`${CLIMATE_API_BASE_URL}/control`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action, value }),
+                    });
+                    if (!response.ok) {
+                        const errData = await response.json();
+                        throw new Error(errData.error || 'Control command failed');
+                    }
+                    await fetchStatus();
+                } catch (e) {
+                    setError(e.message);
+                    console.error(e);
+                }
+            };
+
+            const handleSetTemperature = () => {
+                const temp = parseInt(tempInput, 10);
+                if (!isNaN(temp)) {
+                    sendControlCommand('set_temperature', temp);
+                }
+            };
+
+            if (loading) {
+                return <div className="text-center p-10 text-cyan-400">Loading Climate Data...</div>;
+            }
+
+            return (
+                <div className="w-full h-full">
+                    <div className="h-full bg-black bg-opacity-50 backdrop-blur-xl rounded-2xl border border-cyan-500/50 shadow-cyan-glow p-6 md:p-8" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>                        
+                        <h2 className="text-4xl md:text-5xl font-bold text-cyan-400 mb-8 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>Environmental Control</h2>
+                        {error && <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg relative mb-4" role="alert">{error}</div>}
+                        
+                        {status && (
+                            <div className="mb-8 p-6 bg-black/30 rounded-xl border border-fuchsia-500/50 shadow-fuchsia-glow" style={{animation: 'fuchsia-glow-pulse 4s infinite ease-in-out'}}>
+                                <h3 className="text-3xl font-semibold text-fuchsia-400 mb-4" style={{animation: 'text-fuchsia-glow-pulse 4s infinite ease-in-out'}}>System Status</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                                    <div>
+                                        <p className="text-lg text-gray-400">Temperature</p>
+                                        <p className="text-3xl font-bold text-cyan-300">{status.temperature}°C</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-lg text-gray-400">HVAC</p>
+                                        <p className="text-3xl font-bold text-cyan-300 capitalize">{status.hvac_mode}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-lg text-gray-400">Lights</p>
+                                        <p className="text-3xl font-bold text-cyan-300">{status.lights_on ? 'On' : 'Off'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div>
+                            <h3 className="text-3xl font-semibold text-fuchsia-400 mb-4" style={{animation: 'text-fuchsia-glow-pulse 4s infinite ease-in-out'}}>Manual Override</h3>
+                            <div className="space-y-6">
+                                <div className="flex items-center space-x-4">
+                                    <label htmlFor="temp-input" className="font-medium text-gray-300 w-32 text-lg">Temperature:</label>
+                                    <input
+                                        id="temp-input"
+                                        type="number"
+                                        value={tempInput}
+                                        onChange={(e) => setTempInput(e.target.value)}
+                                        className="flex-grow p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-cyan-400 focus:ring-0 focus:outline-none text-white text-lg"
+                                    />
+                                    <button onClick={handleSetTemperature} className="bg-transparent border-2 border-cyan-400 text-cyan-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-cyan-400 hover:text-black hover:shadow-[0_0_15px_rgba(0,255,255,0.8)]">
+                                        Set
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center space-x-4">
+                                    <label className="font-medium text-gray-300 w-32 text-lg">HVAC Mode:</label>
+                                    <div className="flex-grow grid grid-cols-3 gap-2">
+                                        <button onClick={() => sendControlCommand('set_hvac_mode', 'heat')} className={`py-2 px-4 rounded-md transition-all duration-300 ${status?.hvac_mode === 'heat' ? 'bg-red-500 text-white shadow-[0_0_10px_#ef4444]' : 'bg-gray-700/50 hover:bg-gray-600/80'}`} style={status?.hvac_mode === 'heat' ? { animation: 'pulse-red 2s infinite ease-in-out' } : {}}>
+                                            Heat
+                                        </button>
+                                        <button onClick={() => sendControlCommand('set_hvac_mode', 'cool')} className={`py-2 px-4 rounded-md transition-all duration-300 ${status?.hvac_mode === 'cool' ? 'bg-cyan-400 text-black shadow-[0_0_10px_#22d3ee]' : 'bg-gray-700/50 hover:bg-gray-600/80'}`} style={status?.hvac_mode === 'cool' ? { animation: 'pulse-cyan 2s infinite ease-in-out' } : {}}>
+                                            Cool
+                                        </button>
+                                        <button onClick={() => sendControlCommand('set_hvac_mode', 'off')} className={`py-2 px-4 rounded-md transition-all duration-300 ${status?.hvac_mode === 'off' ? 'bg-gray-600 text-white' : 'bg-gray-700/50 hover:bg-gray-600/80'}`}>
+                                            Off
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center space-x-4">
+                                    <label className="font-medium text-gray-300 w-32 text-lg">Lighting:</label>
+                                    <div className="flex-grow grid grid-cols-2 gap-2">
+                                        <button onClick={() => sendControlCommand('set_lights', 'on')} className={`py-2 px-4 rounded-md transition-all duration-300 ${status?.lights_on ? 'bg-yellow-300 text-black shadow-[0_0_10px_#fde047]' : 'bg-gray-700/50 hover:bg-gray-600/80'}`} style={status?.lights_on ? { animation: 'pulse-yellow 2s infinite ease-in-out' } : {}}>
+                                            On
+                                        </button>
+                                        <button onClick={() => sendControlCommand('set_lights', 'off')} className={`py-2 px-4 rounded-md transition-all duration-300 ${!status?.lights_on ? 'bg-gray-600 text-white' : 'bg-gray-700/50 hover:bg-gray-600/80'}`}>
+                                            Off
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Parking Control Component ---
+        const ParkingPanel = () => {
+            const [allSpots, setAllSpots] = React.useState([]);
+            const [availableSpots, setAvailableSpots] = React.useState([]);
+            const [myReservations, setMyReservations] = React.useState([]);
+            const [userName, setUserName] = React.useState("jacx");
+            const [spotToReserve, setSpotToReserve] = React.useState("");
+            const [error, setError] = React.useState(null);
+            const [message, setMessage] = React.useState(null);
+            const [loading, setLoading] = React.useState(true);
+
+            const fetchParkingData = async () => {
+                try {
+                    const allSpotsResponse = await fetch(`${PARKING_API_BASE_URL}/all-spots`);
+                    if (!allSpotsResponse.ok) throw new Error('Failed to fetch all spots data');
+                    const allSpotsData = await allSpotsResponse.json();
+                    setAllSpots(allSpotsData);
+
+                    // NOTE: The parking backend's GET /my-reservations endpoint incorrectly expects a body.
+                    // This is non-standard but we will comply with the backend's implementation.
+                    const reservationsResponse = await fetch(`${PARKING_API_BASE_URL}/my-reservations`, {
+                        method: 'POST', // Changed to POST to correctly send a body
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: userName })
+                    });
+                    if (!reservationsResponse.ok) throw new Error('Failed to fetch reservations');
+                    const reservationsData = await reservationsResponse.json();
+                    setMyReservations(reservationsData);
+                    setError(null);
+
+                } catch (e) {
+                    setError(`Parking API Error: ${e.message}. Is the parking server running?`);
+                    console.error(e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            React.useEffect(() => {
+                fetchParkingData();
+                const interval = setInterval(fetchParkingData, 10000);
+                return () => clearInterval(interval);
+            }, [userName]);
+
+            const handleApiResponse = async (response) => {
+                const responseText = await response.text();
+                if (!response.ok) {
+                    throw new Error(responseText);
+                }
+                setMessage(responseText);
+                setTimeout(() => setMessage(null), 5000);
+                await fetchParkingData();
+            };
+
+            const handleApiError = (e, action) => {
+                setError(`${action} failed: ${e.message}`);
+                setTimeout(() => setError(null), 5000);
+                console.error(e);
+            };
+
+            const handleReserveSpot = async () => {
+                if (!spotToReserve || !userName) {
+                    setError("User Name and Spot ID are required to reserve.");
+                    return;
+                }
+                try {
+                    const response = await fetch(`${PARKING_API_BASE_URL}/reserve`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: userName, id: parseInt(spotToReserve, 10) })
+                    });
+                    await handleApiResponse(response);
+                    setSpotToReserve("");
+                } catch (e) {
+                    handleApiError(e, 'Reservation');
+                }
+            };
+
+            const handleCheckIn = async (spotId) => {
+                try {
+                    const response = await fetch(`${PARKING_API_BASE_URL}/checkin`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: userName, id: spotId })
+                    });
+                    await handleApiResponse(response);
+                } catch (e) {
+                    handleApiError(e, 'Check-in');
+                }
+            };
+
+            const Spot = ({ spot }) => {
+                const [isHovered, setIsHovered] = React.useState(false);
+                let spotClass = 'bg-gray-700/50 cursor-not-allowed';
+                let statusText = 'Occupied';
+
+                if (spot.status === 'available') {
+                    spotClass = 'bg-green-500/30 hover:bg-green-500/60 cursor-pointer';
+                    statusText = 'Available';
+                } else if (spot.status === 'reserved') {
+                    spotClass = `bg-yellow-500/30 ${spot.user === userName ? 'border-2 border-fuchsia-400' : ''}`;
+                    statusText = `Reserved by ${spot.user}`;
+                }
+
+                return (
+                    <div className={`relative rounded-md p-2 text-center transition-all duration-200 ${spotClass}`}
+                        onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}
+                        onClick={() => spot.status === 'available' && setSpotToReserve(spot.id)}>
+                        <span className="font-mono text-xl">{spot.id}</span>
+                        {isHovered && <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max bg-black/80 text-white text-xs rounded py-1 px-2 z-10">{statusText}</div>}
+                    </div>
+                );
+            };
+
+            if (loading) {
+                return <div className="text-center p-10 text-fuchsia-400">Loading Parking Data...</div>;
+            }
+
+            return (
+                <div className="w-full h-full">
+                    <div className="h-full bg-black bg-opacity-50 backdrop-blur-xl rounded-2xl border border-fuchsia-500/50 shadow-fuchsia-glow p-6 md:p-8" style={{animation: 'fuchsia-glow-pulse 5s infinite ease-in-out'}}>
+                        <h2 className="text-4xl md:text-5xl font-bold text-fuchsia-400 mb-8 text-center" style={{animation: 'text-fuchsia-glow-pulse 5s infinite ease-in-out'}}>Parking Management</h2>
+                        
+                        {error && <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg relative mb-4" role="alert">{error}</div>}
+                        {message && <div className="bg-green-900/50 border border-green-500 text-green-300 px-4 py-3 rounded-lg relative mb-4" role="alert">{message}</div>}
+
+                        <div className="mb-8 p-4 bg-black/30 rounded-xl border border-cyan-500/30">
+                            <h3 className="text-2xl font-semibold text-cyan-400 mb-4 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>Parking Lot Status</h3>
+                            <div className="grid grid-cols-5 gap-2">
+                                {allSpots.map(spot => <Spot key={spot.id} spot={spot} />)}
+                            </div>
+                        </div>
+
+                        <div className="grid md:grid-cols-1 gap-8">
+                            <div>
+                                <h3 className="text-2xl font-semibold text-cyan-400 mb-4" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>My Reservations</h3>
+                                <div className="h-48 overflow-y-auto bg-black/20 p-3 rounded-lg border border-cyan-500/30 space-y-2">
+                                    {myReservations.length > 0 ? myReservations.map(spotId => (
+                                        <div key={spotId} className="flex justify-between items-center bg-cyan-900/50 p-2 rounded-md">
+                                            <span className="text-cyan-300 font-mono text-lg">Spot {spotId}</span>
+                                            <button onClick={() => handleCheckIn(spotId)} className="bg-transparent border border-fuchsia-400 text-fuchsia-400 text-sm font-bold py-1 px-3 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_10px_rgba(217,70,239,0.8)]">Check In</button>
+                                        </div>
+                                    )) : <p className="text-gray-500">No reservations found for '{userName}'.</p>}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 flex items-center space-x-4 p-4 bg-black/30 rounded-xl border border-fuchsia-500/30">
+                            <input type="number" value={spotToReserve} onChange={e => setSpotToReserve(e.target.value)} placeholder="Spot ID" className="flex-grow p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400 focus:ring-0 focus:outline-none text-white text-lg" />
+                            <button onClick={handleReserveSpot} className="bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-6 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_15px_rgba(217,70,239,0.8)]">Reserve</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Main App Component ---
+        const App = () => {
+            return (
+                <React.Fragment>
+                    <h1 className="text-6xl md:text-7xl font-bold text-cyan-400 mb-8 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>
+                        Officer
+                    </h1>
+                    <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <ClimatePanel />
+                        <ParkingPanel />
+                    </div>
+                </React.Fragment>
+            );
+        };
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+</html>

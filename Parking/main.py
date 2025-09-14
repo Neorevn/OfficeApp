@@ -1,6 +1,8 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 
 parking_spots = []
@@ -19,6 +21,27 @@ def spots_available():
             all_available.append(spot['id'])
     return all_available
 
+@app.get('/api/parking/all-spots')
+def get_all_spots():
+    detailed_spots = []
+    for spot in parking_spots:
+        spot_details = spot.copy()
+        spot_id = spot_details['id']
+        
+        is_checked_in = any(c['id'] == spot_id for c in checkins)
+        reservation_info = next((r for r in reservations if r['id'] == spot_id), None)
+
+        if is_checked_in:
+            spot_details['status'] = 'occupied'
+            spot_details['user'] = next((c['name'] for c in checkins if c['id'] == spot_id), 'unknown')
+        elif reservation_info:
+            spot_details['status'] = 'reserved'
+            spot_details['user'] = reservation_info['name']
+        else:
+            spot_details['status'] = 'available'
+            spot_details['user'] = None
+        detailed_spots.append(spot_details)
+    return jsonify(detailed_spots)
 
 @app.post('/api/parking/reserve')
 def reserve():
@@ -36,7 +59,7 @@ def reserve():
     return 'parking id does not exist', 401
 
 #* GET /api/parking/my-reservations View my parking reservations
-@app.get('/api/parking/my-reservations')
+@app.post('/api/parking/my-reservations')
 def my_reservations():
     name = request.json['name']
     all_my_reservations = []
@@ -93,6 +116,3 @@ def guest_pass():
 
 if __name__ == '__main__':
     app.run(port=5001)
-
-
-

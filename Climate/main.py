@@ -86,4 +86,4 @@ def health_check():
 
 if __name__ == '__main__':
     logging.info("Starting the Flask application for local testing...")
-    app.run(debug=True)
+    app.run()
