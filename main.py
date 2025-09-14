@@ -96,12 +96,3 @@ if __name__ == '__main__':
 
 
 
-
-# DONE * POST /api/parking/reserve Reserve parking spot
-#* GET /api/parking/my-reservations View my parking reservations
-
-#* POST /api/parking/checkin Check into reserved spot
-
-#* POST /api/parking/guest-pass Generate guest parking pass
-
-#* לשאול את חודי בראשון GET /api/parking/violations Check parking violations
