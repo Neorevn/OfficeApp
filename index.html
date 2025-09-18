@@ -14,10 +14,12 @@
                     textShadow: {
                         'cyan': '0 0 8px rgba(0, 255, 255, 0.7)',
                         'fuchsia': '0 0 8px rgba(217, 70, 239, 0.7)',
+                        'green': '0 0 8px rgba(52, 211, 153, 0.7)',
                     },
                     boxShadow: {
                         'cyan-glow': '0 0 15px rgba(0, 255, 255, 0.5), 0 0 20px rgba(0, 255, 255, 0.3) inset',
                         'fuchsia-glow': '0 0 15px rgba(217, 70, 239, 0.5), 0 0 20px rgba(217, 70, 239, 0.3) inset',
+                        'green-glow': '0 0 15px rgba(52, 211, 153, 0.5), 0 0 20px rgba(52, 211, 153, 0.3) inset',
                     }
                 }
             }
@@ -46,7 +48,6 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
         }
         @keyframes cyan-glow-pulse {
             0%, 100% { box-shadow: 0 0 15px rgba(0, 255, 255, 0.5), 0 0 20px rgba(0, 255, 255, 0.3) inset; }
@@ -64,6 +65,14 @@
             0%, 100% { text-shadow: 0 0 8px rgba(217, 70, 239, 0.7); }
             50% { text-shadow: 0 0 16px rgba(217, 70, 239, 1); }
         }
+        @keyframes green-glow-pulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(52, 211, 153, 0.5), 0 0 20px rgba(52, 211, 153, 0.3) inset; }
+            50% { box-shadow: 0 0 25px rgba(52, 211, 153, 0.8), 0 0 30px rgba(52, 211, 153, 0.5) inset; }
+        }
+        @keyframes text-green-glow-pulse {
+            0%, 100% { text-shadow: 0 0 8px rgba(52, 211, 153, 0.7); }
+            50% { text-shadow: 0 0 16px rgba(52, 211, 153, 1); }
+        }
         @keyframes pulse-red {
             50% { box-shadow: 0 0 20px #ef4444; }
         }
@@ -73,17 +82,64 @@
         @keyframes pulse-yellow {
             50% { box-shadow: 0 0 20px #fde047; }
         }
+        @keyframes pulse-green {
+            50% { box-shadow: 0 0 20px #34d399; }
+        }
     </style>
 </head>
 <body class="text-gray-200">
     <div id="root"></div>
 
     <script type="text/babel">
-        const CLIMATE_API_BASE_URL = 'http://127.0.0.1:5000';
-        const PARKING_API_BASE_URL = 'http://127.0.0.1:5001/api/parking';
+        // --- Login Panel Component ---
+        const LoginPanel = ({ onLoginSuccess }) => {
+            const [username, setUsername] = React.useState('');
+            const [password, setPassword] = React.useState('');
+            const [error, setError] = React.useState(null);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError(null);
+                const endpoint = '/api/auth/login';
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password }),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Login failed');
+                    }
+                    onLoginSuccess(data.user);
+                } catch (err) {
+                    setError(err.message);
+                }
+            };
+
+            return (
+                <div className="w-full max-w-md mx-auto mt-20">
+                    <div className="bg-black bg-opacity-50 backdrop-blur-xl rounded-2xl border border-cyan-500/50 shadow-cyan-glow p-8" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
+                        <h1 className="text-5xl font-bold text-cyan-400 mb-6 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>Officer Login</h1>
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <div>
+                                <label className="block text-cyan-300 mb-2">Username</label>
+                                <input type="text" value={username} onChange={e => setUsername(e.target.value)} className="w-full p-3 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-cyan-400 focus:ring-0 focus:outline-none text-white text-lg" required />
+                            </div>
+                            <div>
+                                <label className="block text-cyan-300 mb-2">Password</label>
+                                <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-cyan-400 focus:ring-0 focus:outline-none text-white text-lg" required />
+                            </div>
+                            {error && <p className="text-red-400 bg-red-900/50 border border-red-500 rounded p-2 text-center">{error}</p>}
+                            <button type="submit" className="w-full bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-3 px-6 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_15px_rgba(217,70,239,0.8)]">Login</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
 
         // --- Climate Control Component ---
-        const ClimatePanel = () => {
+        const ClimatePanel = ({ currentUser }) => {
             const [status, setStatus] = React.useState(null);
             const [loading, setLoading] = React.useState(true);
             const [error, setError] = React.useState(null);
@@ -91,7 +147,7 @@
 
             const fetchStatus = async () => {
                 try {
-                    const response = await fetch(`${CLIMATE_API_BASE_URL}/status`);
+                    const response = await fetch('/api/climate/status');
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
@@ -111,23 +167,27 @@
 
             React.useEffect(() => {
                 fetchStatus();
-                const interval = setInterval(fetchStatus, 5000);
-                return () => clearInterval(interval);
+                // Polling removed to rely on action-based updates.
             }, []);
 
             const sendControlCommand = async (action, value) => {
                 try {
                     setError(null);
-                    const response = await fetch(`${CLIMATE_API_BASE_URL}/control`, {
+                    const response = await fetch('/api/climate/control', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-User-Role': currentUser.role
+                        },
                         body: JSON.stringify({ action, value }),
                     });
                     if (!response.ok) {
                         const errData = await response.json();
                         throw new Error(errData.error || 'Control command failed');
                     }
+                    // Fetch status for this panel and trigger global status update
                     await fetchStatus();
+                    window.dispatchEvent(new Event('app-state-changed'));
                 } catch (e) {
                     setError(e.message);
                     console.error(e);
@@ -146,10 +206,12 @@
             }
 
             return (
-                <div className="w-full h-full">
-                    <div className="h-full bg-black bg-opacity-50 backdrop-blur-xl rounded-2xl border border-cyan-500/50 shadow-cyan-glow p-6 md:p-8" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>                        
-                        <h2 className="text-4xl md:text-5xl font-bold text-cyan-400 mb-8 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>Environmental Control</h2>
-                        {error && <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg relative mb-4" role="alert">{error}</div>}
+                <div className="w-full h-full relative pb-12">
+                    <h2 className="text-4xl md:text-5xl font-bold text-cyan-400 mb-8 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>Environmental Control</h2>
+                        
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-auto max-w-3xl text-center">
+                            {error && <div className="bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg inline-block" role="alert">{error}</div>}
+                        </div>
                         
                         {status && (
                             <div className="mb-8 p-6 bg-black/30 rounded-xl border border-fuchsia-500/50 shadow-fuchsia-glow" style={{animation: 'fuchsia-glow-pulse 4s infinite ease-in-out'}}>
@@ -216,41 +278,42 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
                 </div>
             );
         };
 
         // --- Parking Control Component ---
-        const ParkingPanel = () => {
-            const [allSpots, setAllSpots] = React.useState([]);
-            const [availableSpots, setAvailableSpots] = React.useState([]);
+        const ParkingPanel = ({ currentUser }) => {
+            const [spots, setSpots] = React.useState([]);
             const [myReservations, setMyReservations] = React.useState([]);
-            const [userName, setUserName] = React.useState("jacx");
-            const [spotToReserve, setSpotToReserve] = React.useState("");
+            const [selectedSpot, setSelectedSpot] = React.useState(null);
             const [error, setError] = React.useState(null);
             const [message, setMessage] = React.useState(null);
             const [loading, setLoading] = React.useState(true);
 
             const fetchParkingData = async () => {
                 try {
-                    const allSpotsResponse = await fetch(`${PARKING_API_BASE_URL}/all-spots`);
-                    if (!allSpotsResponse.ok) throw new Error('Failed to fetch all spots data');
-                    const allSpotsData = await allSpotsResponse.json();
-                    setAllSpots(allSpotsData);
+                    const [spotsRes, reservationsRes] = await Promise.all([
+                        fetch('/api/parking/all-spots'),
+                        fetch('/api/parking/my-reservations', {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'X-User-Role': currentUser.role
+                            },
+                            body: JSON.stringify({ name: currentUser.username })
+                        })
+                    ]);
 
-                    // NOTE: The parking backend's GET /my-reservations endpoint incorrectly expects a body.
-                    // This is non-standard but we will comply with the backend's implementation.
-                    const reservationsResponse = await fetch(`${PARKING_API_BASE_URL}/my-reservations`, {
-                        method: 'POST', // Changed to POST to correctly send a body
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: userName })
-                    });
-                    if (!reservationsResponse.ok) throw new Error('Failed to fetch reservations');
-                    const reservationsData = await reservationsResponse.json();
+                    if (!spotsRes.ok) throw new Error('Failed to fetch spots data');
+                    if (!reservationsRes.ok) throw new Error('Failed to fetch reservations');
+
+                    const spotsData = await spotsRes.json();
+                    const reservationsData = await reservationsRes.json();
+
+                    setSpots(spotsData);
                     setMyReservations(reservationsData);
                     setError(null);
-
                 } catch (e) {
                     setError(`Parking API Error: ${e.message}. Is the parking server running?`);
                     console.error(e);
@@ -261,76 +324,130 @@
 
             React.useEffect(() => {
                 fetchParkingData();
-                const interval = setInterval(fetchParkingData, 10000);
-                return () => clearInterval(interval);
-            }, [userName]);
-
-            const handleApiResponse = async (response) => {
-                const responseText = await response.text();
-                if (!response.ok) {
-                    throw new Error(responseText);
-                }
-                setMessage(responseText);
-                setTimeout(() => setMessage(null), 5000);
-                await fetchParkingData();
-            };
-
-            const handleApiError = (e, action) => {
-                setError(`${action} failed: ${e.message}`);
-                setTimeout(() => setError(null), 5000);
-                console.error(e);
-            };
+            }, []);
 
             const handleReserveSpot = async () => {
-                if (!spotToReserve || !userName) {
-                    setError("User Name and Spot ID are required to reserve.");
-                    return;
-                }
+                if (!selectedSpot) return setError("A spot must be selected to reserve.");
+
                 try {
-                    const response = await fetch(`${PARKING_API_BASE_URL}/reserve`, {
+                    const response = await fetch('/api/parking/reserve', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: userName, id: parseInt(spotToReserve, 10) })
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-User-Role': currentUser.role
+                        },
+                        body: JSON.stringify({ name: currentUser.username, id: selectedSpot.id })
                     });
-                    await handleApiResponse(response);
-                    setSpotToReserve("");
+                    const responseText = await response.text();
+                    if (!response.ok) throw new Error(responseText);
+                    setMessage(responseText);
+                    setTimeout(() => setMessage(null), 3000);
+                    window.dispatchEvent(new Event('app-state-changed'));
+                    await fetchParkingData();
+                    setSelectedSpot(null);
                 } catch (e) {
-                    handleApiError(e, 'Reservation');
+                    setError(`Reservation failed: ${e.message}`);
+                    setTimeout(() => setError(null), 5000);
                 }
             };
 
             const handleCheckIn = async (spotId) => {
                 try {
-                    const response = await fetch(`${PARKING_API_BASE_URL}/checkin`, {
+                     const response = await fetch('/api/parking/checkin', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: userName, id: spotId })
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-User-Role': currentUser.role
+                        },
+                        body: JSON.stringify({ name: currentUser.username, id: spotId })
                     });
-                    await handleApiResponse(response);
+                    const responseText = await response.text();
+                    if (!response.ok) throw new Error(responseText);
+                    setMessage(responseText);
+                    setTimeout(() => setMessage(null), 3000);
+                    window.dispatchEvent(new Event('app-state-changed'));
+                    await fetchParkingData();
                 } catch (e) {
-                    handleApiError(e, 'Check-in');
+                    setError(`Check-in failed: ${e.message}`);
+                    setTimeout(() => setError(null), 5000);
+                }
+            };
+
+            const handleUnreserveSpot = async (spotId) => {
+                try {
+                    const response = await fetch('/api/parking/unreserve', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-User-Role': currentUser.role
+                        },
+                        body: JSON.stringify({ name: currentUser.username, id: spotId })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'Un-reservation failed');
+                    setMessage(data.message);
+                    setTimeout(() => setMessage(null), 3000);
+                    window.dispatchEvent(new Event('app-state-changed'));
+                    await fetchParkingData();
+                } catch (e) {
+                    setError(`Un-reservation failed: ${e.message}`);
+                    setTimeout(() => setError(null), 5000);
+                }
+            };
+
+            const handleClearSpot = async (spotId) => {
+                if (!confirm(`Are you sure you want to clear spot ${spotId}? This will remove any check-in and reservation.`)) {
+                    return;
+                }
+                try {
+                    const response = await fetch(`/api/parking/clear-spot/${spotId}`, {
+                        method: 'POST',
+                        headers: {
+                            'X-User-Role': currentUser.role,
+                            'X-User-Username': currentUser.username
+                        }
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'Failed to clear spot.');
+                    setMessage(data.message);
+                    setTimeout(() => setMessage(null), 3000);
+                    window.dispatchEvent(new Event('app-state-changed'));
+                    await fetchParkingData();
+                } catch (e) {
+                    setError(`Failed to clear spot: ${e.message}`);
+                    setTimeout(() => setError(null), 5000);
                 }
             };
 
             const Spot = ({ spot }) => {
-                const [isHovered, setIsHovered] = React.useState(false);
-                let spotClass = 'bg-gray-700/50 cursor-not-allowed';
-                let statusText = 'Occupied';
+                let spotClass = 'bg-gray-800/60 border-gray-700';
+                let icon = '🅿️';
+                let isClickable = false;
 
                 if (spot.status === 'available') {
-                    spotClass = 'bg-green-500/30 hover:bg-green-500/60 cursor-pointer';
-                    statusText = 'Available';
+                    spotClass = 'bg-green-900/50 border-green-500/50 hover:bg-green-800/70 cursor-pointer';
+                    isClickable = true;
                 } else if (spot.status === 'reserved') {
-                    spotClass = `bg-yellow-500/30 ${spot.user === userName ? 'border-2 border-fuchsia-400' : ''}`;
-                    statusText = `Reserved by ${spot.user}`;
+                    spotClass = `bg-yellow-900/50 border-yellow-500/50 ${spot.user === currentUser.username ? 'ring-2 ring-fuchsia-400' : ''}`;
+                    icon = 'Reserved';
+                } else { // occupied
+                    icon = '🚗';
+                }
+
+                if (selectedSpot && selectedSpot.id === spot.id) {
+                    spotClass += ' ring-4 ring-cyan-400';
                 }
 
                 return (
-                    <div className={`relative rounded-md p-2 text-center transition-all duration-200 ${spotClass}`}
-                        onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}
-                        onClick={() => spot.status === 'available' && setSpotToReserve(spot.id)}>
-                        <span className="font-mono text-xl">{spot.id}</span>
-                        {isHovered && <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max bg-black/80 text-white text-xs rounded py-1 px-2 z-10">{statusText}</div>}
+                    <div className={`relative rounded-lg p-2 text-center transition-all duration-200 border ${spotClass} flex flex-col justify-center items-center h-24 group`}
+                        onClick={() => isClickable && setSelectedSpot(spot)}>
+                        <div className="text-3xl">{icon}</div>
+                        <div className="font-mono text-lg mt-1">{spot.id}</div>
+                        {spot.status === 'occupied' && currentUser.role === 'admin' && (
+                            <button onClick={(e) => { e.stopPropagation(); handleClearSpot(spot.id); }} className="absolute bottom-1 right-1 bg-red-600/80 hover:bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                Clear
+                            </button>
+                        )}
                     </div>
                 );
             };
@@ -340,54 +457,526 @@
             }
 
             return (
-                <div className="w-full h-full">
-                    <div className="h-full bg-black bg-opacity-50 backdrop-blur-xl rounded-2xl border border-fuchsia-500/50 shadow-fuchsia-glow p-6 md:p-8" style={{animation: 'fuchsia-glow-pulse 5s infinite ease-in-out'}}>
-                        <h2 className="text-4xl md:text-5xl font-bold text-fuchsia-400 mb-8 text-center" style={{animation: 'text-fuchsia-glow-pulse 5s infinite ease-in-out'}}>Parking Management</h2>
-                        
-                        {error && <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg relative mb-4" role="alert">{error}</div>}
-                        {message && <div className="bg-green-900/50 border border-green-500 text-green-300 px-4 py-3 rounded-lg relative mb-4" role="alert">{message}</div>}
-
-                        <div className="mb-8 p-4 bg-black/30 rounded-xl border border-cyan-500/30">
-                            <h3 className="text-2xl font-semibold text-cyan-400 mb-4 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>Parking Lot Status</h3>
-                            <div className="grid grid-cols-5 gap-2">
-                                {allSpots.map(spot => <Spot key={spot.id} spot={spot} />)}
+                <div className="w-full h-full relative">
+                    <h2 className="text-4xl md:text-5xl font-bold text-fuchsia-400 mb-8 text-center" style={{animation: 'text-fuchsia-glow-pulse 5s infinite ease-in-out'}}>Parking Management</h2>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div className="lg:col-span-2 bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
+                                <h3 className="text-2xl font-semibold text-cyan-400 mb-4 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>Parking Lot Status</h3>
+                                <div className="grid grid-cols-4 md:grid-cols-5 gap-3">
+                                    {spots.map(spot => <Spot key={spot.id} spot={spot} />)}
+                                </div>
                             </div>
-                        </div>
 
-                        <div className="grid md:grid-cols-1 gap-8">
-                            <div>
-                                <h3 className="text-2xl font-semibold text-cyan-400 mb-4" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>My Reservations</h3>
-                                <div className="h-48 overflow-y-auto bg-black/20 p-3 rounded-lg border border-cyan-500/30 space-y-2">
-                                    {myReservations.length > 0 ? myReservations.map(spotId => (
-                                        <div key={spotId} className="flex justify-between items-center bg-cyan-900/50 p-2 rounded-md">
-                                            <span className="text-cyan-300 font-mono text-lg">Spot {spotId}</span>
-                                            <button onClick={() => handleCheckIn(spotId)} className="bg-transparent border border-fuchsia-400 text-fuchsia-400 text-sm font-bold py-1 px-3 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_10px_rgba(217,70,239,0.8)]">Check In</button>
+                            <div className="space-y-6">
+                                <div className="bg-black/30 p-4 rounded-xl border border-fuchsia-500/30 shadow-fuchsia-glow" style={{animation: 'fuchsia-glow-pulse 5s infinite ease-in-out'}}>
+                                    <h3 className="text-2xl font-semibold text-fuchsia-400 mb-4">Reserve a Spot</h3>
+                                    {selectedSpot ? (
+                                        <div className="text-center">
+                                            <p className="text-lg">Selected Spot: <span className="font-bold text-cyan-300 text-2xl">{selectedSpot.id}</span></p>
+                                            <p className="text-gray-400 mb-4">Status: <span className="capitalize">{selectedSpot.status}</span></p>
+                                            <button onClick={handleReserveSpot} className="w-full bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-6 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_15px_rgba(217,70,239,0.8)]">Confirm Reservation</button>
                                         </div>
-                                    )) : <p className="text-gray-500">No reservations found for '{userName}'.</p>}
+                                    ) : (
+                                        <p className="text-gray-500 text-center py-8">Click an available spot on the map to begin.</p>
+                                    )}
+                                </div>
+                                <div className="relative">
+                                    <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
+                                        <h3 className="text-2xl font-semibold text-cyan-400 mb-4">My Reservations</h3>
+                                        <div className="space-y-2">
+                                            {myReservations && myReservations.length > 0 ? myReservations.map(spotId => (
+                                                <div key={spotId} className="flex justify-between items-center bg-cyan-900/50 p-2 rounded-md">
+                                                    <span className="text-cyan-300 font-mono text-lg">Spot {spotId}</span>
+                                                    <div className="flex items-center space-x-2">
+                                                        <button onClick={() => handleUnreserveSpot(spotId)} className="bg-transparent border border-red-500 text-red-400 text-sm font-bold py-1 px-3 rounded-md transition-all duration-300 hover:bg-red-500 hover:text-white">Unreserve</button>
+                                                        <button onClick={() => handleCheckIn(spotId)} className="bg-transparent border border-fuchsia-400 text-fuchsia-400 text-sm font-bold py-1 px-3 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_10px_rgba(217,70,239,0.8)]">Check In</button>
+                                                    </div>
+                                                </div>
+                                            )) : <p className="text-gray-500 text-center">No reservations found for '{currentUser.username}'.</p>}
+                                        </div>
+                                    </div>
+                                    {/* Alerts are positioned absolutely below the "My Reservations" box */}
+                                    {error && <div className="absolute w-full mt-2 bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg" role="alert">{error}</div>}
+                                    {message && <div className="absolute w-full mt-2 bg-green-900/80 border border-green-500 text-green-300 px-4 py-2 rounded-lg" role="alert">{message}</div>}
                                 </div>
                             </div>
                         </div>
+                </div>
+            );
+        };
 
-                        <div className="mt-8 flex items-center space-x-4 p-4 bg-black/30 rounded-xl border border-fuchsia-500/30">
-                            <input type="number" value={spotToReserve} onChange={e => setSpotToReserve(e.target.value)} placeholder="Spot ID" className="flex-grow p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400 focus:ring-0 focus:outline-none text-white text-lg" />
-                            <button onClick={handleReserveSpot} className="bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-6 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_15px_rgba(217,70,239,0.8)]">Reserve</button>
+        // --- Automation Control Component ---
+        const AutomationPanel = ({ currentUser }) => {
+            const [rules, setRules] = React.useState([]);
+            const [energySavings, setEnergySavings] = React.useState(null);
+            const [loading, setLoading] = React.useState(true);
+            const [error, setError] = React.useState(null);
+            const [message, setMessage] = React.useState(null);
+
+            const [sceneName, setSceneName] = React.useState('focus_mode');
+            const [sceneSettings, setSceneSettings] = React.useState('{"lights": "dim", "temperature": 22}');
+            const [motionArea, setMotionArea] = React.useState('main_office');
+
+            const fetchData = async () => {
+                try {
+                    const [rulesRes, savingsRes] = await Promise.all([
+                        fetch('/api/automation/rules'),
+                        fetch('/api/automation/energy-savings')
+                    ]);
+
+                    if (!rulesRes.ok) throw new Error('Failed to fetch automation rules');
+                    if (!savingsRes.ok) throw new Error('Failed to fetch energy savings');
+
+                    const rulesData = await rulesRes.json();
+                    const savingsData = await savingsRes.json();
+
+                    setRules(rulesData);
+                    setEnergySavings(savingsData);
+                    setError(null);
+                } catch (e) {
+                    setError(`Automation API Error: ${e.message}`);
+                    console.error(e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            React.useEffect(() => {
+                fetchData();
+                // Polling removed to rely on action-based updates.
+            }, []);
+
+            const handleApiCall = async (endpoint, body, successMessage) => {
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-User-Role': currentUser.role
+                        },
+                        body: JSON.stringify(body),
+                    });
+                    const responseData = await response.json();
+                    if (!response.ok) {
+                        throw new Error(responseData.error || 'API call failed');
+                    }
+                    setMessage(successMessage);
+                    setTimeout(() => setMessage(null), 5000);
+                    window.dispatchEvent(new Event('app-state-changed'));
+                    await fetchData(); // Refresh data after action
+                } catch (e) {
+                    setError(e.message);
+                    setTimeout(() => setError(null), 5000);
+                    console.error(e);
+                }
+            };
+
+            const handleToggleRule = (ruleId) => {
+                handleApiCall(`/api/automation/rules/toggle/${ruleId}`, {}, 'Rule toggled!');
+            };
+
+            const handleTestRule = (rule) => {
+                handleApiCall(`/api/automation/rules/test/${rule.id}`, {}, `Test triggered for rule #${rule.id}.`);
+            };
+
+
+
+            if (loading) {
+                return <div className="text-center p-10 text-green-400">Loading Automation Data...</div>;
+            }
+
+            return (
+                <div className="w-full h-full relative pb-12">
+                    <h2 className="text-4xl md:text-5xl font-bold text-green-400 mb-8 text-center" style={{animation: 'text-green-glow-pulse 6s infinite ease-in-out'}}>Automation Hub</h2>
+                        
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-auto max-w-3xl text-center space-y-2">
+                            {error && <div className="bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg inline-block" role="alert">{error}</div>}
+                            {message && <div className="bg-green-900/80 border border-green-500 text-green-300 px-4 py-2 rounded-lg inline-block" role="alert">{message}</div>}
                         </div>
+
+                        {currentUser.role === 'admin' && <CreateRuleForm currentUser={currentUser} onRuleCreated={fetchData} />}
+
+                        <div className="grid md:grid-cols-1 gap-6 mb-6">
+                            <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
+                                <h3 className="text-xl font-semibold text-cyan-400 mb-3 text-center">Energy Savings</h3>
+                                {energySavings ? (
+                                    <div className="text-center">
+                                        <p className="text-gray-400">HVAC Reduced: <span className="font-bold text-cyan-300">{energySavings.hvac_runtime_reduced_hours} hrs</span></p>
+                                        <p className="text-gray-400">Lights Off: <span className="font-bold text-cyan-300">{energySavings.lights_off_hours} hrs</span></p>
+                                    </div>
+                                ) : <p className="text-gray-500">No data.</p>}
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
+                                <h3 className="text-2xl font-semibold text-cyan-400 mb-4">Active Rules</h3>
+                                <div className="space-y-3 h-64 overflow-y-auto pr-2">
+                                    {rules.length > 0 ? rules.map(rule => (
+                                        <div key={rule.id} className="bg-gray-800/50 p-3 rounded-lg flex items-center justify-between">
+                                            <div className="flex-grow">
+                                                <p className="font-semibold text-cyan-300">{rule.description}</p>
+                                                <p className="text-xs text-gray-400 font-mono">ID: {rule.id} | Trigger: {rule.trigger.type}</p>
+                                            </div>
+                                            <div className="flex items-center space-x-2 ml-4">
+                                                {currentUser.role === 'admin' && (
+                                                    <React.Fragment>
+                                                        <button onClick={() => handleTestRule(rule)} className="bg-transparent border border-cyan-400 text-cyan-400 text-sm font-bold py-1 px-3 rounded-md transition-all duration-300 hover:bg-cyan-400 hover:text-black">Test</button>
+                                                        <button onClick={() => handleToggleRule(rule.id)} className={`py-1 px-3 rounded-md text-sm transition-all duration-300 ${rule.active ? 'bg-green-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>{rule.active ? 'On' : 'Off'}</button>
+                                                    </React.Fragment>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )) : <p className="text-gray-500 text-center mt-4">No rules defined.</p>}
+                                </div>
+                            </div>
+                        </div>
+                </div>
+            );
+        };
+
+        // --- Create Rule Form (Admin Only) ---
+        const CreateRuleForm = ({ currentUser, onRuleCreated }) => {
+            const [allUsers, setAllUsers] = React.useState([]);
+            const [triggerType, setTriggerType] = React.useState('motion');
+            const [triggerConditionKey, setTriggerConditionKey] = React.useState('area');
+            const [triggerConditionValue, setTriggerConditionValue] = React.useState('main_office');
+            const [actionType, setActionType] = React.useState('lights_on');
+            const [error, setError] = React.useState(null);
+
+            React.useEffect(() => {
+                // Fetch users for the user_login condition dropdown
+                const fetchUsers = async () => {
+                    try {
+                        const response = await fetch('/api/users/all', { headers: { 'X-User-Role': currentUser.role } });
+                        if (response.ok) {
+                            const data = await response.json();
+                            setAllUsers(data);
+                        }
+                    } catch (e) { console.error("Failed to fetch users for automation form", e); }
+                };
+                fetchUsers();
+            }, []);
+
+            const handleTriggerChange = (e) => {
+                const newTrigger = e.target.value;
+                setTriggerType(newTrigger);
+                // Reset conditions when trigger type changes
+                if (newTrigger === 'motion') {
+                    setTriggerConditionKey('area');
+                    setTriggerConditionValue('main_office');
+                } else if (newTrigger === 'user_login') {
+                    setTriggerConditionKey('username');
+                    setTriggerConditionValue(allUsers[0]?.username || '');
+                } else if (newTrigger === 'parking_checkin') {
+                    setTriggerConditionKey('spot_id');
+                    setTriggerConditionValue('1');
+                }
+            };
+
+            const generateDescription = () => {
+                const actionText = actionType.replace('_', ' ');
+                if (triggerType === 'motion') return `When motion is detected in '${triggerConditionValue}', ${actionText}.`;
+                if (triggerType === 'user_login') return `When user '${triggerConditionValue}' logs in, ${actionText}.`;
+                if (triggerType === 'parking_checkin') return `When someone checks into parking spot ${triggerConditionValue}, ${actionText}.`;
+                return 'Custom rule';
+            };
+
+            const handleCreateRule = async (e) => {
+                e.preventDefault();
+                setError(null);
+
+                const rule = {
+                    trigger: { type: triggerType, condition: { [triggerConditionKey]: triggerConditionValue } },
+                    action: { type: actionType },
+                    description: generateDescription()
+                };
+
+                try {
+                    const response = await fetch('/api/automation/rules/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-User-Role': currentUser.role },
+                        body: JSON.stringify(rule)
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'Failed to create rule');
+                    onRuleCreated(); // Notify parent to refresh
+                } catch (err) {
+                    setError(err.message);
+                }
+            };
+
+            const renderConditionInput = () => {
+                if (triggerType === 'user_login') {
+                    return <select value={triggerConditionValue} onChange={e => setTriggerConditionValue(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400">{allUsers.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}</select>;
+                }
+                return <input type="text" value={triggerConditionValue} onChange={e => setTriggerConditionValue(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400" />;
+            };
+
+            return (
+                <div className="bg-black/30 p-4 rounded-xl border border-fuchsia-500/30 shadow-fuchsia-glow mb-6">
+                    <h3 className="text-2xl font-semibold text-fuchsia-400 mb-4">Create New Automation Rule</h3>
+                    <form onSubmit={handleCreateRule} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <select value={triggerType} onChange={handleTriggerChange} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="motion">Motion Detected</option><option value="user_login">User Logs In</option><option value="parking_checkin">Parking Check-in</option></select>
+                        {renderConditionInput()}
+                        <select value={actionType} onChange={e => setActionType(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="lights_on">Turn Lights On</option><option value="lights_off">Turn Lights Off</option><option value="hvac_off">Turn HVAC Off</option></select>
+                        <button type="submit" className="bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black">Create Rule</button>
+                    </form>
+                    {error && <p className="text-red-400 mt-2">{error}</p>}
+                </div>
+            );
+        };
+
+        // --- Users Management Panel (Admin Only) ---
+        const UsersPanel = ({ currentUser }) => {
+            const [users, setUsers] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            const [error, setError] = React.useState(null);
+            const [message, setMessage] = React.useState(null);
+            
+            // State for the new user form
+            const [newUsername, setNewUsername] = React.useState('');
+            const [newPassword, setNewPassword] = React.useState('');
+            const [newRole, setNewRole] = React.useState('user');
+
+
+            const fetchUsers = async () => {
+                try {
+                    const response = await fetch('/api/users/all', {
+                        headers: { 'X-User-Role': currentUser.role }
+                    });
+                    if (!response.ok) throw new Error('Failed to fetch users.');
+                    const data = await response.json();
+                    setUsers(data);
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            React.useEffect(() => {
+                fetchUsers();
+            }, []);
+
+            const handleApiCall = async (method, endpoint, body, successCallback) => {
+                try {
+                    const response = await fetch(endpoint, {
+                        method: method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-User-Username': currentUser.username,
+                            'X-User-Role': currentUser.role
+                        },
+                        body: JSON.stringify({ username, role: newRole })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'Failed to set role.');
+                    setMessage(data.message);
+                    setTimeout(() => setMessage(null), 3000);
+                    if (successCallback) successCallback();
+                    await fetchUsers();
+                } catch (e) {
+                    setError(e.message);
+                    setTimeout(() => setError(null), 5000);
+                }
+            };
+
+            const handleSetRole = (username, role) => {
+                handleApiCall('POST', '/api/users/set-role', { username, role });
+            };
+
+            const handleCreateUser = (e) => {
+                e.preventDefault();
+                handleApiCall('POST', '/api/users/create', { username: newUsername, password: newPassword, role: newRole }, () => {
+                    // Clear form on success
+                    setNewUsername('');
+                    setNewPassword('');
+                    setNewRole('user');
+                });
+            };
+
+            const handleChangePassword = (username) => {
+                const newPassword = prompt(`Enter new password for ${username}:`);
+                if (newPassword && newPassword.trim() !== '') {
+                    handleApiCall('POST', '/api/users/change-password', { username, password: newPassword });
+                }
+            };
+
+            const handleDeleteUser = (username) => {
+                if (confirm(`Are you sure you want to delete the user "${username}"? This action cannot be undone.`)) {
+                    handleApiCall('DELETE', `/api/users/delete/${username}`);
+                }
+            };
+
+            if (loading) return <div className="text-center p-10 text-cyan-400">Loading User Data...</div>;
+
+            return (
+                <div className="w-full h-full flex flex-col pb-12">
+                    <h2 className="text-4xl md:text-5xl font-bold text-cyan-400 mb-8 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>User Management</h2>
+                    <div className="bg-black/30 p-4 rounded-xl border border-fuchsia-500/30 shadow-fuchsia-glow mb-6">
+                        <h3 className="text-2xl font-semibold text-fuchsia-400 mb-4">Create New User</h3>
+                        <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                            <input type="text" placeholder="Username" value={newUsername} onChange={e => setNewUsername(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400 focus:ring-0 focus:outline-none" required />
+                            <input type="password" placeholder="Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400 focus:ring-0 focus:outline-none" required />
+                            <select value={newRole} onChange={e => setNewRole(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400 focus:ring-0 focus:outline-none">
+                                <option value="user">User</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                            <button type="submit" className="bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black">Create User</button>
+                        </form>
                     </div>
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-3xl text-center space-y-2">
+                        {error && <div className="bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg inline-block" role="alert">{error}</div>}
+                        {message && <div className="bg-green-900/80 border border-green-500 text-green-300 px-4 py-2 rounded-lg inline-block" role="alert">{message}</div>}
+                    </div>
+                    <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow flex-grow overflow-y-auto pr-2">
+                        <h3 className="text-2xl font-semibold text-cyan-400 mb-4">Existing Users</h3>
+                        {users.map(user => (
+                            <div key={user.username} className="bg-gray-800/50 p-3 rounded-lg flex items-center justify-between mb-3">
+                                <div className="flex-grow">
+                                    <p className="font-semibold text-cyan-300 text-lg">{user.username}</p>
+                                    <p className="text-sm text-gray-400 capitalize">Role: {user.role}</p>
+                                </div>
+                                {user.username !== currentUser.username && (
+                                    <div className="flex items-center space-x-2">
+                                        <button onClick={() => handleChangePassword(user.username)} className="py-1 px-3 rounded-md text-sm font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-all duration-300">Password</button>
+                                        <button onClick={() => handleSetRole(user.username, user.role === 'admin' ? 'user' : 'admin')} className={`py-1 px-3 rounded-md text-sm font-bold transition-all duration-300 ${user.role === 'admin' ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`}>{user.role === 'admin' ? 'Demote' : 'Promote'}</button>
+                                        <button onClick={() => handleDeleteUser(user.username)} className="py-1 px-3 rounded-md text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-all duration-300">Delete</button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Status Line Component ---
+        const StatusLine = () => {
+            const [climateStatus, setClimateStatus] = React.useState(null);
+            const [parkingSpots, setParkingSpots] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            
+            const fetchData = async () => {
+                try {
+                    const [climateRes, parkingRes] = await Promise.all([
+                        fetch('/api/climate/status'),
+                        fetch('/api/parking/all-spots')
+                    ]);
+                    const climateData = climateRes.ok ? await climateRes.json() : null;
+                    const parkingData = parkingRes.ok ? await parkingRes.json() : [];
+                    setClimateStatus(climateData);
+                    setParkingSpots(parkingData);
+                } catch (e) {
+                    console.error("Status line fetch error:", e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            React.useEffect(() => {
+                fetchData();
+                window.addEventListener('app-state-changed', fetchData);
+                return () => window.removeEventListener('app-state-changed', fetchData);
+            }, []);
+
+            const availableSpots = parkingSpots.filter(s => s.status === 'available').length;
+
+            // Render placeholders to prevent layout shift
+            return (
+                <div className="w-full max-w-screen-2xl mb-6 text-center text-lg text-cyan-300/80 flex justify-center items-center space-x-6 font-mono h-7">
+                    {loading || !climateStatus ? <span>TEMP: --°C</span> : <span>TEMP: {climateStatus.temperature}°C</span>}
+                    <span className="text-gray-600">|</span>
+                    {loading || !climateStatus ? <span>LIGHTS: ---</span> : <span>LIGHTS: {climateStatus.lights_on ? 'ON' : 'OFF'}</span>}
+                    <span className="text-gray-600">|</span>
+                    {loading || parkingSpots.length === 0 ? <span>PARKING: -- SPOTS AVAILABLE</span> : <span>PARKING: {availableSpots} SPOTS AVAILABLE</span>}
                 </div>
             );
         };
 
         // --- Main App Component ---
         const App = () => {
+            const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+            const [currentUser, setCurrentUser] = React.useState(null);
+            const [currentView, setCurrentView] = React.useState('climate');
+
+            const handleLoginSuccess = (user) => {
+                setCurrentUser(user);
+                setIsLoggedIn(true);
+            };
+
+            React.useEffect(() => {
+                const healthCheck = () => {
+                    fetch('/health').catch(err => console.error("Health check failed:", err));
+                };
+                // Initial check
+                healthCheck();
+                // Set interval for every 30 seconds
+                const intervalId = setInterval(healthCheck, 30000);
+                // Cleanup on component unmount
+                return () => clearInterval(intervalId);
+            }, []);
+
+            if (!isLoggedIn) {
+                return <LoginPanel onLoginSuccess={handleLoginSuccess} />;
+            }
+
+            const renderView = () => {
+                switch (currentView) {
+                    case 'climate':
+                        return <ClimatePanel currentUser={currentUser} />;
+                    case 'parking':
+                        return <ParkingPanel currentUser={currentUser} />;
+                    case 'automation':
+                        return <AutomationPanel currentUser={currentUser} />;
+                    case 'users':
+                        return <UsersPanel currentUser={currentUser} />;
+                    default:
+                        return <ClimatePanel currentUser={currentUser} />;
+                }
+            };
+
+            const NavItem = ({ view, label, icon }) => (
+                <button
+                    onClick={() => setCurrentView(view)}
+                    className={`flex items-center space-x-2 py-3 px-6 transition-all duration-200 border-b-2 -mb-px ${
+                        currentView === view
+                            ? 'border-cyan-400 text-cyan-300'
+                            : 'border-transparent text-gray-400 hover:text-white hover:border-cyan-500/50'
+                    }`}
+                >
+                    <span className="text-xl">{icon}</span>
+                    <span className="font-semibold text-md">{label}</span>
+                </button>
+            );
+
             return (
                 <React.Fragment>
-                    <h1 className="text-6xl md:text-7xl font-bold text-cyan-400 mb-8 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>
+                    <h1 className="text-7xl md:text-8xl font-bold text-cyan-400 mb-4 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>
                         Officer
                     </h1>
-                    <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <ClimatePanel />
-                        <ParkingPanel />
+                    <div className="flex justify-between items-center w-full max-w-screen-2xl">
+                        <div className="text-gray-500">User: <span className="text-fuchsia-400">{currentUser.username} ({currentUser.role})</span></div>
+                        <StatusLine />
+                        <button onClick={() => { setIsLoggedIn(false); setCurrentUser(null); }} className="text-gray-500 hover:text-cyan-300">Logout</button>
                     </div>
+                    <div className="bg-black bg-opacity-50 backdrop-blur-xl rounded-2xl border border-cyan-500/50 shadow-cyan-glow" style={{width: '1440px', height: '820px', animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
+                        <nav className="flex justify-center border-b border-cyan-500/30 px-2">
+                            <NavItem view="climate" label="Environment" icon="🌡️" />
+                            <NavItem view="parking" label="Parking" icon="🅿️" />
+                            {/* Show automation tab to all, but functionality is restricted inside */}
+                            <NavItem view="automation" label="Automation" icon="🤖" />
+                            {currentUser.role === 'admin' && <NavItem view="users" label="Users" icon="👥" />}
+                        </nav>
+                        {/* Subtract nav height and padding from main content area */}
+                        <main className="p-6 md:p-8" style={{height: 'calc(100% - 55px)'}}>
+                            {renderView()}
+                        </main>
+                    </div>
+                    <footer className="w-full text-center text-xs text-gray-600 font-mono pt-4">
+                        Co-Founders Reut, Fuad and Neorevn
+                    </footer>
                 </React.Fragment>
             );
         };

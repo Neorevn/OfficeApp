@@ -1,0 +1,5 @@
+# Environment variables - NEVER commit this file!
+.env
+
+# Python cache
+__pycache__/
