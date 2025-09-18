@@ -12,7 +12,8 @@ A cyberpunk-themed dashboard to control various office systems from a single, un
 
 ## 📸 Screenshot
 
-![Uploading image.png…]()
+<img width="2314" height="1568" alt="image" src="https://github.com/user-attachments/assets/45336409-ac27-42e3-9b18-6a715a9bc5e6" />
+
 
 
 
