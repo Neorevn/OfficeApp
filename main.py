@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 import logging
+import os
 from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
 from datetime import datetime
@@ -94,6 +95,11 @@ def time_trigger_job():
 def create_app():
     app = Flask(__name__, static_folder='.', static_url_path='')
     CORS(app)
+
+    # Set the secret key required for JWT signing
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+    if not app.config['SECRET_KEY']:
+        raise ValueError("FATAL: SECRET_KEY environment variable not set. Please set it in your .env file.")
 
     # Serverside logger
     logging.basicConfig(level=logging.INFO,

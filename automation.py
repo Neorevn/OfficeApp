@@ -4,26 +4,13 @@ from bson import json_util
 import json
 
 from database import db
-from auth import admin_required
+from auth import admin_required, token_required
 
 automation_bp = Blueprint('automation_bp', __name__)
-
-# Checks for admin role
-def is_admin():
-    return request.headers.get('X-User-Role') == 'admin'
-
-# Checks for user role, If user role == True then user will have view only permission
-def auth_required(role='any'):
-    user_role = request.headers.get('X-User-Role')
-    if not user_role or (role == 'admin' and user_role != 'admin'):
-        return False
-    return True
 
 @automation_bp.route('/api/automation/rules/create', methods=['POST'])
 @admin_required
 def create_automation_rule():
-    if not is_admin():
-        return jsonify({'error': 'Administrator access required'}), 403   
     data = request.get_json()
     if not data or 'trigger' not in data or 'action' not in data:
         return jsonify({'error': 'Missing trigger or action in request body'}), 400
@@ -51,6 +38,7 @@ def create_automation_rule():
     return jsonify(new_rule), 201
 
 @automation_bp.route('/api/automation/rules', methods=['GET'])
+@token_required
 def get_all_rules():
     rules = list(db.automation_rules.find({}, {'_id': 0}))
     return jsonify(rules)
@@ -58,8 +46,6 @@ def get_all_rules():
 @automation_bp.route('/api/automation/rules/toggle/<int:rule_id>', methods=['POST'])
 @admin_required
 def toggle_rule(rule_id):
-    if not is_admin():
-        return jsonify({'error': 'Administrator access required'}), 403
     rule = db.automation_rules.find_one({'id': rule_id})
     if not rule:
         return jsonify({'error': 'Rule not found'}), 404
@@ -77,9 +63,6 @@ def toggle_rule(rule_id):
 @automation_bp.route('/api/automation/rules/delete/<int:rule_id>', methods=['DELETE'])
 @admin_required
 def delete_rule(rule_id):
-    if not is_admin():
-        return jsonify({'error': 'Administrator access required'}), 403
-    
     result = db.automation_rules.delete_one({'id': rule_id})
     
     if result.deleted_count == 0:
@@ -92,8 +75,6 @@ def delete_rule(rule_id):
 @automation_bp.route('/api/automation/scenes/create', methods=['POST'])
 @admin_required
 def create_environmental_scene():
-    if not is_admin():
-        return jsonify({'error': 'Administrator access required'}), 403
     data = request.get_json()
     if not data or 'name' not in data or 'settings' not in data:
         return jsonify({'error': 'Missing name or settings for the scene'}), 400
@@ -168,8 +149,6 @@ def trigger_motion():
 @automation_bp.route('/api/automation/rules/test/<int:rule_id>', methods=['POST'])
 @admin_required
 def test_rule(rule_id):
-    if not is_admin():
-        return jsonify({'error': 'Administrator access required'}), 403
     rule = db.automation_rules.find_one({'id': rule_id})
     if not rule:
         return jsonify({'error': 'Rule not found'}), 404
@@ -181,6 +160,7 @@ def test_rule(rule_id):
     return jsonify({'message': f"Test triggered for rule #{rule_id}. Action '{action}' executed."}), 200
 
 @automation_bp.route('/api/automation/energy-savings', methods=['GET'])
+@token_required
 def get_energy_savings():
     # In a real app, this would be calculated. For now, we'll just return the placeholder.
     energy_savings = db.energy_savings.find_one({'_id': 'office'})

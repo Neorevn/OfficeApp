@@ -4,16 +4,13 @@ from bson import json_util
 import json
 
 from database import db
+from auth import token_required
 
 climate_bp = Blueprint('climate_bp', __name__)
 
 @climate_bp.route('/api/climate/control', methods=['POST'])
+@token_required
 def control():
-    # Basic auth check: ensure a user is logged in.
-    user_role = request.headers.get('X-User-Role')
-    if not user_role:
-        return jsonify({'error': 'Authentication required'}), 401
-    
     data = request.get_json()
     if not data:
         logging.warning("No data provided in request.")
@@ -63,6 +60,7 @@ def control():
         return jsonify({'error': 'Invalid action specified'}), 400
 
 @climate_bp.route('/api/climate/status', methods=['GET'])
+@token_required
 def status():
     office_state = db.state.find_one({'_id': 'office'})
     if not office_state:

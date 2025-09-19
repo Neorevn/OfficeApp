@@ -53,7 +53,7 @@ The "Officer" dashboard integrates multiple control panels into a single, cohesi
 
 ###  Automation Hub
 - **Dynamic Rule Engine**: Administrators can create complex, event-driven rules from the UI.
-    - **Triggers**: `User Login`, `Parking Check-in`, `Motion Detected`.
+    - **Triggers**: `User Login`, `Parking Check-in`, `Motion Detected`, `Time of Day`.
     - **Actions**: `Turn Lights On/Off`, `Turn HVAC Off`.
 - **Energy Savings**: Monitor estimated energy savings achieved through automation.
 
@@ -65,6 +65,7 @@ This project follows a monolithic backend architecture with a modular design, se
 
 -   **Backend (Flask)**: The core application is a Flask server that acts as a unified API gateway. Functionality is broken down into distinct modules using **Flask Blueprints** (`auth`, `climate`, `parking`, `automation`), promoting separation of concerns and maintainability.
 -   **Frontend (React)**: The user interface is a single `index.html` file powered by React (using JSX transpiled in the browser via Babel). This creates a dynamic and responsive dashboard without requiring a separate frontend build step, making it simple to run.
+-   **Security**: Authentication is handled via JSON Web Tokens (JWT). The backend issues a signed token on login, which the frontend then includes in the `Authorization` header for all subsequent API requests. This ensures every protected endpoint verifies the user's identity and role on the server.
 -   **Database (MongoDB)**: A single MongoDB database (`office_app_db`) persists all application state, from user credentials to parking spot status and automation rules.
 -   **Communication**: The frontend communicates with the backend via a RESTful API. All API endpoints are consolidated under the `/api/` prefix.
 
@@ -100,7 +101,9 @@ OfficeApp/
     - **Flask**: A lightweight micro-framework for creating the REST APIs.
     - **MongoDB**: The primary database for storing all application data.
     - **PyMongo**: Python driver for MongoDB.
-    - **Werkzeug**: For secure password hashing.
+    - **PyJWT**: For generating and validating JSON Web Tokens.
+    - **APScheduler**: For running scheduled background tasks (e.g., time-based automation).
+    - **Werkzeug**: For password hashing and other web utilities.
 
 ---
 
@@ -118,11 +121,19 @@ OfficeApp/
 No matter how you run the application, you first need to configure your database connection.
 
 1.  In the root of the `OfficeApp` directory, create a file named `.env`.
-2.  Inside the `.env` file, add your MongoDB connection string. **Do not include quotes.**
+2.  Inside the `.env` file, add your MongoDB connection string and a secret key for signing JWTs. **Do not include quotes.**
+
+    You can generate a strong secret key by running this in a Python shell:
+    ```python
+    import secrets
+    secrets.token_hex(24)
+    ```
+
     ```env
     MONGO_URI=mongodb+srv://<username>:<password>@<cluster-address>/<database-name>?retryWrites=true&w=majority
+    SECRET_KEY=your_super_secret_randomly_generated_key_here
     ```
-3.  Replace the placeholders with your actual database credentials.
+3.  Replace the placeholders with your actual database credentials and generated secret key.
 
 ### 2. Running the Application
 
@@ -166,7 +177,7 @@ To avoid rebuilding the image on every code change, you can use a bind mount to 
     - **Container name**: Give it a memorable name, like `officer-dev-gui`.
     - **Ports**: Set the "Host port" to `5000`.
     - **Volumes**: For "Host path", browse to your project folder. For "Container path", enter `/app`.
-    - **Environment variables**: Browse and select your `.env` file. Which contains the `MONGO_URI`. Copy and paste it in the Value box and the Variable should be `MONGO_URI`.
+    - **Environment variables**: Write both Varible Names taken from `.env` and Values in their respective fields. `MONGO_URI` and `SECRET_KEY`.
 5.  Click **Run**.
 6.  To apply code changes, go to the **Containers** tab and click the **Restart** button on your running container.
 

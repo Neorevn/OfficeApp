@@ -1,18 +1,46 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app, g
 import logging
 from werkzeug.security import generate_password_hash, check_password_hash
 from bson import json_util
 import json
 from functools import wraps
+import jwt
+from datetime import datetime, timedelta
 
 from database import db
+
+def token_required(f):
+    """Decorator to ensure a valid JWT is present."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            try:
+                token = request.headers['Authorization'].split(" ")[1]
+            except IndexError:
+                return jsonify({'message': 'Malformed token header.'}), 401
+
+        if not token:
+            return jsonify({'message': 'Authentication Token is missing!'}), 401
+
+        try:
+            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=["HS256"])
+            g.current_user = db.users.find_one({"username": data['username']})
+            if not g.current_user:
+                 return jsonify({'message': 'User not found.'}), 401
+        except (jwt.ExpiredSignatureError, jwt.InvalidTokenError) as e:
+            return jsonify({'message': f'Token is invalid: {e}'}), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
 
 def admin_required(f):
     """Decorator to ensure the user has an 'admin' role."""
     @wraps(f)
+    @token_required
     def decorated_function(*args, **kwargs):
-        if request.headers.get('X-User-Role') != 'admin':
-            return jsonify({'error': 'Administrator access required'}), 403
+        if g.current_user.get('role') != 'admin':
+            return jsonify({'error': 'Administrator access required.'}), 403
         return f(*args, **kwargs)
     return decorated_function
 
@@ -20,7 +48,6 @@ auth_bp = Blueprint('auth_bp', __name__)
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():
-    from automation import process_event
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({'error': 'Missing username or password'}), 400
@@ -30,13 +57,19 @@ def login():
     if not user or not check_password_hash(user['password'], data['password']):
         logging.warning(f"Auth: Failed login attempt for user '{data['username']}'.")
         return jsonify({'error': 'Invalid username or password'}), 401
-
+    
     logging.info(f"Auth: User '{user['username']}' logged in successfully.")
-    # Trigger automation event for user login
-    process_event('user_login', {'username': user['username']})
+    
+    # Create JWT
+    token = jwt.encode({
+        'username': user['username'],
+        'role': user['role'],
+        'exp': datetime.utcnow() + timedelta(hours=24) # Token expires in 24 hours
+    }, current_app.config['SECRET_KEY'], algorithm="HS256")
+
     # Don't send the password hash to the client
     user.pop('password', None)
-    return json.loads(json_util.dumps({'status': 'success', 'user': user}))
+    return jsonify({'status': 'success', 'user': json.loads(json_util.dumps(user)), 'token': token})
 
 @auth_bp.route('/api/users/all', methods=['GET'])
 @admin_required
@@ -103,8 +136,7 @@ def change_user_password():
 @auth_bp.route('/api/users/delete/<username>', methods=['DELETE'])
 @admin_required
 def delete_user(username):
-    admin_username = request.headers.get('X-User-Username')
-    if username == admin_username:
+    if username == g.current_user['username']:
         return jsonify({'error': 'Administrators cannot delete their own account.'}), 400
     user_to_delete = db.users.find_one({'username': username})
     if not user_to_delete:
@@ -113,5 +145,5 @@ def delete_user(username):
     if user_to_delete.get('role') == 'admin' and db.users.count_documents({'role': 'admin'}) <= 1:
         return jsonify({'error': 'Cannot delete the last administrator.'}), 400
     db.users.delete_one({'username': username})
-    logging.info(f"Auth: User '{username}' was deleted by admin '{admin_username}'.")
+    logging.info(f"Auth: User '{username}' was deleted by admin '{g.current_user['username']}'.")
     return jsonify({'status': 'success', 'message': f"User '{username}' has been deleted."})

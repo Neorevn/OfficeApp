@@ -94,40 +94,120 @@
         @keyframes pulse-green {
             50% { box-shadow: 0 0 20px #34d399; }
         }
+
+        @keyframes scanner {
+            0%, 100% { transform: scaleY(1); opacity: 1; }
+            50% { transform: scaleY(0.2); opacity: 0.5; }
+        }
+        .scanner-bar {
+            width: 4px;
+            height: 24px;
+            background-color: #22d3ee; /* cyan-400 */
+            animation: scanner 1.2s infinite ease-in-out;
+        }
+        /* Splash Screen Styling */
+        #splash-screen {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          /* Use a dark background matching your theme */
+          background-color: #1a1a2e; 
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 9999;
+          opacity: 1;
+          /* This transition will smoothly fade out the splash screen */
+          transition: opacity 1.5s ease-out;
+        }
+
+        /* Class to hide the splash screen */
+        #splash-screen.hidden {
+          opacity: 0;
+          /* Prevents the hidden splash screen from capturing mouse events */
+          pointer-events: none;
+        }
+
+        .splash-logo {
+          width: 400px; /* Adjust size as needed */
+          animation: pulse 2s infinite ease-in-out;
+        }
+
+        /* Keyframe animation for the logo */
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 0.7; }
+          50% { transform: scale(1.1); opacity: 1; }
+        }
+
     </style>
 </head>
 <body class="text-gray-200">
+    <div id="splash-screen">
+        <img src="/static/logo.png" alt="Officer Logo" class="splash-logo" />
+    </div>
     <div id="root"></div>
-
+ 
     <script type="text/babel">
+        // --- Reusable Spinner Component ---
+        const Spinner = () => (
+            <div className="flex items-center justify-center space-x-1 h-6">
+                <div className="scanner-bar" style={{ animationDelay: '-0.4s' }}></div>
+                <div className="scanner-bar" style={{ animationDelay: '-0.2s' }}></div>
+                <div className="scanner-bar"></div>
+            </div>
+        ); 
+
+        // --- API Helper ---
+        const authenticatedFetch = async (url, options = {}) => {
+            const token = localStorage.getItem('token');
+            const headers = {
+                ...options.headers,
+                'Content-Type': 'application/json',
+            };
+
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            // The response is returned directly to the caller for handling
+            return fetch(url, { ...options, headers });
+        };
+
         // --- Login Panel Component ---
         const LoginPanel = ({ onLoginSuccess }) => {
             const [username, setUsername] = React.useState('');
             const [password, setPassword] = React.useState('');
             const [error, setError] = React.useState(null);
+            const [isLoggingIn, setIsLoggingIn] = React.useState(false);
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 setError(null);
+                setIsLoggingIn(true);
                 const endpoint = '/api/auth/login';
                 try {
-                    const response = await fetch(endpoint, {
+                    const response = await authenticatedFetch(endpoint, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ username, password }),
                     });
                     const data = await response.json();
                     if (!response.ok) {
                         throw new Error(data.error || 'Login failed');
                     }
+                    // Store the token
+                    localStorage.setItem('token', data.token);
                     onLoginSuccess(data.user);
                 } catch (err) {
                     setError(err.message);
+                } finally {
+                    setIsLoggingIn(false);
                 }
             };
 
             return (
-                <div className="w-full max-w-md mx-auto mt-20">
+                <div className="w-full max-w-md mx-auto">
                     <div className="bg-black bg-opacity-50 backdrop-blur-xl rounded-2xl border border-cyan-500/50 shadow-cyan-glow p-8" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
                         <h1 className="text-5xl font-bold text-cyan-400 mb-6 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>Officer Login</h1>
                         <form onSubmit={handleSubmit} className="space-y-6">
@@ -140,7 +220,9 @@
                                 <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-cyan-400 focus:ring-0 focus:outline-none text-white text-lg" required />
                             </div>
                             {error && <p className="text-red-400 bg-red-900/50 border border-red-500 rounded p-2 text-center">{error}</p>}
-                            <button type="submit" className="w-full bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-3 px-6 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_15px_rgba(217,70,239,0.8)]">Login</button>
+                            <button type="submit" disabled={isLoggingIn} className="w-full flex justify-center items-center gap-2 bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-3 px-6 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black hover:shadow-[0_0_15px_rgba(217,70,239,0.8)] disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isLoggingIn ? <><Spinner /> Authenticating...</> : 'Login'}
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -156,7 +238,7 @@
 
             const fetchStatus = async () => {
                 try {
-                    const response = await fetch('/api/climate/status');
+                    const response = await authenticatedFetch('/api/climate/status');
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
@@ -165,10 +247,9 @@
                     if (document.activeElement.id !== 'temp-input') {
                         setTempInput(data.temperature);
                     }
-                    setError(null); // Clear previous errors on successful fetch
+                    setError(null);
                 } catch (e) {
                     setError(`Climate API Error: ${e.message}. Is the climate server running?`);
-                    console.error(e);
                 } finally {
                     setLoading(false);
                 }
@@ -180,14 +261,10 @@
             }, []);
 
             const sendControlCommand = async (action, value) => {
+                setError(null);
                 try {
-                    setError(null);
-                    const response = await fetch('/api/climate/control', {
+                    const response = await authenticatedFetch('/api/climate/control', {
                         method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'X-User-Role': currentUser.role
-                        },
                         body: JSON.stringify({ action, value }),
                     });
                     if (!response.ok) {
@@ -199,7 +276,6 @@
                     window.dispatchEvent(new Event('app-state-changed'));
                 } catch (e) {
                     setError(e.message);
-                    console.error(e);
                 }
             };
 
@@ -210,8 +286,8 @@
                 }
             };
 
-            if (loading) {
-                return <div className="text-center p-10 text-cyan-400">Loading Climate Data...</div>;
+            if (loading) { 
+                return <div className="text-center p-10 text-cyan-400 flex justify-center items-center gap-4"><Spinner /> Loading Climate Data...</div>;
             }
 
             return (
@@ -303,14 +379,9 @@
             const fetchParkingData = async () => {
                 try {
                     const [spotsRes, reservationsRes] = await Promise.all([
-                        fetch('/api/parking/all-spots'),
-                        fetch('/api/parking/my-reservations', {
+                        authenticatedFetch('/api/parking/all-spots'),
+                        authenticatedFetch('/api/parking/my-reservations', {
                             method: 'POST',
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'X-User-Role': currentUser.role
-                            },
-                            body: JSON.stringify({ name: currentUser.username })
                         })
                     ]);
 
@@ -325,12 +396,10 @@
                     setError(null);
                 } catch (e) {
                     setError(`Parking API Error: ${e.message}. Is the parking server running?`);
-                    console.error(e);
                 } finally {
                     setLoading(false);
                 }
             };
-
             React.useEffect(() => {
                 fetchParkingData();
             }, []);
@@ -339,13 +408,9 @@
                 if (!selectedSpot) return setError("A spot must be selected to reserve.");
 
                 try {
-                    const response = await fetch('/api/parking/reserve', {
+                    const response = await authenticatedFetch('/api/parking/reserve', {
                         method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'X-User-Role': currentUser.role
-                        },
-                        body: JSON.stringify({ name: currentUser.username, id: selectedSpot.id })
+                        body: JSON.stringify({ id: selectedSpot.id })
                     });
                     const responseText = await response.text();
                     if (!response.ok) throw new Error(responseText);
@@ -362,13 +427,9 @@
 
             const handleCheckIn = async (spotId) => {
                 try {
-                     const response = await fetch('/api/parking/checkin', {
+                     const response = await authenticatedFetch('/api/parking/checkin', {
                         method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'X-User-Role': currentUser.role
-                        },
-                        body: JSON.stringify({ name: currentUser.username, id: spotId })
+                        body: JSON.stringify({ id: spotId })
                     });
                     const responseText = await response.text();
                     if (!response.ok) throw new Error(responseText);
@@ -384,13 +445,9 @@
 
             const handleUnreserveSpot = async (spotId) => {
                 try {
-                    const response = await fetch('/api/parking/unreserve', {
+                    const response = await authenticatedFetch('/api/parking/unreserve', {
                         method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'X-User-Role': currentUser.role
-                        },
-                        body: JSON.stringify({ name: currentUser.username, id: spotId })
+                        body: JSON.stringify({ id: spotId })
                     });
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'Un-reservation failed');
@@ -409,12 +466,8 @@
                     return;
                 }
                 try {
-                    const response = await fetch(`/api/parking/clear-spot/${spotId}`, {
+                    const response = await authenticatedFetch(`/api/parking/clear-spot/${spotId}`, {
                         method: 'POST',
-                        headers: {
-                            'X-User-Role': currentUser.role,
-                            'X-User-Username': currentUser.username
-                        }
                     });
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'Failed to clear spot.');
@@ -461,8 +514,8 @@
                 );
             };
 
-            if (loading) {
-                return <div className="text-center p-10 text-fuchsia-400">Loading Parking Data...</div>;
+            if (loading) { 
+                return <div className="text-center p-10 text-fuchsia-400 flex justify-center items-center gap-4"><Spinner /> Loading Parking Data...</div>;
             }
 
             return (
@@ -475,7 +528,6 @@
                                     {spots.map(spot => <Spot key={spot.id} spot={spot} />)}
                                 </div>
                             </div>
-
                             <div className="space-y-6">
                                 <div className="bg-black/30 p-4 rounded-xl border border-fuchsia-500/30 shadow-fuchsia-glow" style={{animation: 'fuchsia-glow-pulse 5s infinite ease-in-out'}}>
                                     <h3 className="text-2xl font-semibold text-fuchsia-400 mb-4">Reserve a Spot</h3>
@@ -502,11 +554,11 @@
                                                     </div>
                                                 </div>
                                             )) : <p className="text-gray-500 text-center">No reservations found for '{currentUser.username}'.</p>}
+                                            {/* Alerts are positioned absolutely below the "My Reservations" box */}
+                                            {error && <div className="absolute w-full mt-2 bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg" role="alert">{error}</div>}
+                                            {message && <div className="absolute w-full mt-2 bg-green-900/80 border border-green-500 text-green-300 px-4 py-2 rounded-lg" role="alert">{message}</div>}
                                         </div>
                                     </div>
-                                    {/* Alerts are positioned absolutely below the "My Reservations" box */}
-                                    {error && <div className="absolute w-full mt-2 bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg" role="alert">{error}</div>}
-                                    {message && <div className="absolute w-full mt-2 bg-green-900/80 border border-green-500 text-green-300 px-4 py-2 rounded-lg" role="alert">{message}</div>}
                                 </div>
                             </div>
                         </div>
@@ -529,8 +581,8 @@
             const fetchData = async () => {
                 try {
                     const [rulesRes, savingsRes] = await Promise.all([
-                        fetch('/api/automation/rules'),
-                        fetch('/api/automation/energy-savings')
+                        authenticatedFetch('/api/automation/rules'),
+                        authenticatedFetch('/api/automation/energy-savings')
                     ]);
 
                     if (!rulesRes.ok) throw new Error('Failed to fetch automation rules');
@@ -544,7 +596,6 @@
                     setError(null);
                 } catch (e) {
                     setError(`Automation API Error: ${e.message}`);
-                    console.error(e);
                 } finally {
                     setLoading(false);
                 }
@@ -556,13 +607,11 @@
             }, []);
 
             const handleApiCall = async (method, endpoint, body, successMessage) => {
+                setError(null);
+                setMessage(null);
                 try {
-                    const response = await fetch(endpoint, {
+                    const response = await authenticatedFetch(endpoint, {
                         method: method,
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'X-User-Role': currentUser.role
-                        },
                         body: body ? JSON.stringify(body) : undefined,
                     });
                     const responseData = await response.json();
@@ -576,7 +625,6 @@
                 } catch (e) {
                     setError(e.message);
                     setTimeout(() => setError(null), 5000);
-                    console.error(e);
                 }
             };
 
@@ -594,11 +642,31 @@
                 }
             };
 
-
-
-            if (loading) {
-                return <div className="text-center p-10 text-green-400">Loading Automation Data...</div>;
+            if (loading) { 
+                return <div className="text-center p-10 text-green-400 flex justify-center items-center gap-4"><Spinner /> Loading Automation Data...</div>;
             }
+
+            const AdminRuleActions = ({ rule }) => (
+                <div className="flex items-center space-x-2 ml-4">
+                    <button onClick={() => handleTestRule(rule)} className="bg-transparent border border-cyan-400 text-cyan-400 text-sm font-bold py-1 px-3 rounded-md transition-all duration-300 hover:bg-cyan-400 hover:text-black">Test</button>
+                    <button onClick={() => handleToggleRule(rule.id)} className={`py-1 px-3 rounded-md text-sm transition-all duration-300 ${rule.active ? 'bg-green-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>{rule.active ? 'On' : 'Off'}</button>
+                    <button onClick={() => handleDeleteRule(rule.id)} className="py-1 px-3 rounded-md text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-all duration-300">Delete</button>
+                </div>
+            );
+
+            const renderRuleList = () => (
+                <div className="space-y-3 h-64 overflow-y-auto pr-2">
+                    {rules.length > 0 ? rules.map(rule => (
+                        <div key={rule.id} className="bg-gray-800/50 p-3 rounded-lg flex items-center justify-between">
+                            <div className="flex-grow">
+                                <p className="font-semibold text-cyan-300">{rule.description}</p>
+                                <p className="text-xs text-gray-400 font-mono">ID: {rule.id} | Trigger: {rule.trigger.type}</p>
+                            </div>
+                            {currentUser.role === 'admin' && <AdminRuleActions rule={rule} />}
+                        </div>
+                    )) : <p className="text-gray-500 text-center mt-4">No rules defined.</p>}
+                </div>
+            );
 
             return (
                 <div className="w-full h-full relative pb-12">
@@ -610,8 +678,7 @@
                         </div>
 
                         {currentUser.role === 'admin' && <CreateRuleForm currentUser={currentUser} onRuleCreated={fetchData} />}
-
-                        <div className="grid md:grid-cols-1 gap-6 mb-6">
+                        <div className="space-y-6">
                             <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
                                 <h3 className="text-xl font-semibold text-cyan-400 mb-3 text-center">Energy Savings</h3>
                                 {energySavings ? (
@@ -621,30 +688,9 @@
                                     </div>
                                 ) : <p className="text-gray-500">No data.</p>}
                             </div>
-                        </div>
-
-                        <div className="space-y-6">
                             <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow" style={{animation: 'cyan-glow-pulse 4s infinite ease-in-out'}}>
                                 <h3 className="text-2xl font-semibold text-cyan-400 mb-4">Active Rules</h3>
-                                <div className="space-y-3 h-64 overflow-y-auto pr-2">
-                                    {rules.length > 0 ? rules.map(rule => (
-                                        <div key={rule.id} className="bg-gray-800/50 p-3 rounded-lg flex items-center justify-between">
-                                            <div className="flex-grow">
-                                                <p className="font-semibold text-cyan-300">{rule.description}</p>
-                                                <p className="text-xs text-gray-400 font-mono">ID: {rule.id} | Trigger: {rule.trigger.type}</p>
-                                            </div>
-                                            <div className="flex items-center space-x-2 ml-4">
-                                                {currentUser.role === 'admin' && (
-                                                    <React.Fragment>
-                                                        <button onClick={() => handleTestRule(rule)} className="bg-transparent border border-cyan-400 text-cyan-400 text-sm font-bold py-1 px-3 rounded-md transition-all duration-300 hover:bg-cyan-400 hover:text-black">Test</button>
-                                                        <button onClick={() => handleToggleRule(rule.id)} className={`py-1 px-3 rounded-md text-sm transition-all duration-300 ${rule.active ? 'bg-green-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>{rule.active ? 'On' : 'Off'}</button>
-                                                        <button onClick={() => handleDeleteRule(rule.id)} className="py-1 px-3 rounded-md text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-all duration-300">Delete</button>
-                                                    </React.Fragment>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )) : <p className="text-gray-500 text-center mt-4">No rules defined.</p>}
-                                </div>
+                                {renderRuleList()}
                             </div>
                         </div>
                 </div>
@@ -664,7 +710,7 @@
                 // Fetch users for the user_login condition dropdown
                 const fetchUsers = async () => {
                     try {
-                        const response = await fetch('/api/users/all', { headers: { 'X-User-Role': currentUser.role } });
+                        const response = await authenticatedFetch('/api/users/all');
                         if (response.ok) {
                             const data = await response.json();
                             setAllUsers(data);
@@ -704,7 +750,6 @@
 
             const handleCreateRule = async (e) => {
                 e.preventDefault();
-                setError(null);
 
                 const rule = {
                     trigger: { type: triggerType, condition: { [triggerConditionKey]: triggerConditionValue } },
@@ -713,16 +758,16 @@
                 };
 
                 try {
-                    const response = await fetch('/api/automation/rules/create', {
+                    const response = await authenticatedFetch('/api/automation/rules/create', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-User-Role': currentUser.role },
                         body: JSON.stringify(rule)
                     });
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'Failed to create rule');
                     onRuleCreated(); // Notify parent to refresh
+                    // No message here, parent will show it.
                 } catch (err) {
-                    setError(err.message);
+                    // Error will be handled by parent component
                 }
             };
 
@@ -765,9 +810,7 @@
 
             const fetchUsers = async () => {
                 try {
-                    const response = await fetch('/api/users/all', {
-                        headers: { 'X-User-Role': currentUser.role }
-                    });
+                    const response = await authenticatedFetch('/api/users/all');
                     if (!response.ok) throw new Error('Failed to fetch users.');
                     const data = await response.json();
                     setUsers(data);
@@ -784,13 +827,8 @@
 
             const handleApiCall = async (method, endpoint, body, successCallback) => {
                 try {
-                    const response = await fetch(endpoint, {
+                    const response = await authenticatedFetch(endpoint, {
                         method: method,
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-User-Username': currentUser.username,
-                            'X-User-Role': currentUser.role
-                        },
                         body: body ? JSON.stringify(body) : undefined
                     });
                     const data = await response.json();
@@ -808,7 +846,6 @@
             const handleSetRole = (username, role) => {
                 handleApiCall('POST', '/api/users/set-role', { username, role: role });
             };
-
             const handleCreateUser = (e) => {
                 e.preventDefault();
                 handleApiCall('POST', '/api/users/create', { username: newUsername, password: newPassword, role: newRole }, () => {
@@ -832,7 +869,7 @@
                 }
             };
 
-            if (loading) return <div className="text-center p-10 text-cyan-400">Loading User Data...</div>;
+            if (loading) return <div className="text-center p-10 text-cyan-400 flex justify-center items-center gap-4"><Spinner /> Loading User Data...</div>;
 
             return (
                 <div className="w-full h-full flex flex-col pb-12">
@@ -848,10 +885,6 @@
                             </select>
                             <button type="submit" className="bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black">Create User</button>
                         </form>
-                    </div>
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-3xl text-center space-y-2">
-                        {error && <div className="bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg inline-block" role="alert">{error}</div>}
-                        {message && <div className="bg-green-900/80 border border-green-500 text-green-300 px-4 py-2 rounded-lg inline-block" role="alert">{message}</div>}
                     </div>
                     <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow flex-grow overflow-y-auto pr-2">
                         <h3 className="text-2xl font-semibold text-cyan-400 mb-4">Existing Users</h3>
@@ -870,6 +903,10 @@
                                 )}
                             </div>
                         ))}
+                    </div>
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-auto max-w-3xl text-center space-y-2">
+                        {error && <div className="bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg inline-block" role="alert">{error}</div>}
+                        {message && <div className="bg-green-900/80 border border-green-500 text-green-300 px-4 py-2 rounded-lg inline-block" role="alert">{message}</div>}
                     </div>
                 </div>
             );
@@ -908,12 +945,28 @@
                 return sunday;
             };
         
+            const checkOverlap = (newBooking) => {
+                const newStart = new Date(newBooking.start_time);
+                const newEnd = new Date(newStart.getTime() + newBooking.duration_minutes * 60000);
+
+                for (const existing of bookings) {
+                    if (existing.room_id !== newBooking.room_id) continue;
+
+                    const existingStart = new Date(existing.start_time);
+                    const existingEnd = new Date(existing.end_time);
+
+                    if (newStart < existingEnd && newEnd > existingStart) {
+                        return true; // Found an overlap
+                    }
+                }
+                return false; // No overlap
+            };
+
             const [rooms, setRooms] = React.useState([]);
             const [bookings, setBookings] = React.useState([]);
             const [loading, setLoading] = React.useState(true);
             const [error, setError] = React.useState(null);
             const [message, setMessage] = React.useState(null);
-        
             const [currentWeekStart, setCurrentWeekStart] = React.useState(getStartOfWeek(new Date()));
         
             // Booking form state
@@ -926,14 +979,11 @@
                 // This function is now self-contained and handles its own loading state.
                 setLoading(true);
                 try {
-                    const headers = { 'X-User-Role': currentUser.role, 'X-User-Username': currentUser.username };
                     const weekStartISO = new Date(currentWeekStart.setHours(0,0,0,0)).toISOString();
         
                     const [roomsRes, bookingsRes] = await Promise.all([
-                        // Fetch the static list of rooms
-                        fetch('/api/rooms/status', { headers }),
-                        // Fetch all bookings for the currently viewed week
-                        fetch(`/api/rooms/bookings-for-week?start_date=${weekStartISO}`, { headers })
+                        authenticatedFetch('/api/rooms/status'),
+                        authenticatedFetch(`/api/rooms/bookings-for-week?start_date=${weekStartISO}`)
                     ]);
         
                     if (!roomsRes.ok) throw new Error('Failed to fetch room status');
@@ -948,7 +998,7 @@
                     }
                     setRooms(roomsData);
                     setBookings(bookingsData);
-                    setError(null); // Clear previous errors on success
+                    setError(null);
                 } catch (e) {
                     setError(`Meeting Rooms API Error: ${e.message}`);
                 } finally {
@@ -959,19 +1009,12 @@
             React.useEffect(() => {
                 fetchData();
             }, [currentWeekStart]);
-        
+
             const handleApiCall = async (method, endpoint, body, successMessage) => {
                 let responseData;
                 try {
-                    setError(null);
-                    setMessage(null);
-                    const response = await fetch(endpoint, {
+                    const response = await authenticatedFetch(endpoint, {
                         method: method,
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-User-Role': currentUser.role,
-                            'X-User-Username': currentUser.username
-                        },
                         body: body ? JSON.stringify(body) : undefined,
                     });
                     responseData = await response.json();
@@ -1005,6 +1048,12 @@
                     start_time: startDateTime.toISOString()
                 };
         
+                if (checkOverlap(body)) {
+                    setError("This time slot is already booked or overlaps with an existing booking.");
+                    setTimeout(() => setError(null), 5000);
+                    return;
+                }
+
                 const responseData = await handleApiCall('POST', '/api/rooms/book', body, null);
                 if (responseData?.booking) {
                     setBookings(prev => [...prev, responseData.booking]);
@@ -1036,17 +1085,19 @@
                 return day;
             });
         
-            // --- Data Processing for UI (with crash protection) ---
+            // --- Data Processing for UI ---
             const roomMap = React.useMemo(() => new Map(rooms.map(room => [room.id, room])), [rooms]);
             const bookingsByDay = React.useMemo(() => {
                  const grouped = Array.from({length: 5}, () => []);
-                 if (!Array.isArray(bookings)) return grouped; // Safety check
+                 if (!Array.isArray(bookings)) return grouped;
          
                  bookings.forEach(booking => {
-                     // **CRASH FIX**: Ensure booking and start_time exist and create a valid date.
+                     // Ensure booking and start_time exist and create a valid date.
                      if (!booking || !booking.start_time) return;
                      const startDate = new Date(booking.start_time);
-                     if (isNaN(startDate.getTime())) return; // Skip bookings with invalid dates.
+                     if (isNaN(startDate.getTime())) {
+                         return;
+                     }
          
                      const dayOfWeek = startDate.getDay(); // 0=Sun, 1=Mon, ..., 4=Thu
          
@@ -1059,7 +1110,7 @@
          
                  grouped.forEach(day => day.sort((a, b) => new Date(a.start_time) - new Date(b.start_time)));
                  return grouped;
-            }, [bookings]);
+            }, [bookings]); // Semicolon was missing here, causing a syntax error
 
             // --- Color mapping for rooms ---
             const roomColors = [
@@ -1069,7 +1120,7 @@
                 'bg-indigo-800/80 border-indigo-500', // Room 4
             ];
         
-            if (loading) return <div className="text-center p-10 text-orange-400">Loading Meeting Room Data...</div>;
+            if (loading) return <div className="text-center p-10 text-orange-400 flex justify-center items-center gap-4"><Spinner /> Loading Meeting Room Data...</div>;
         
             return (
                 <div className="w-full h-full flex flex-col">
@@ -1089,7 +1140,6 @@
                                 </h3>
                                 <button onClick={() => changeWeek(1)} className="text-cyan-400 hover:text-white">Next Week ›</button>
                             </div>
-                            {/* **FIX**: This container is now correctly configured to be scrollable within the main app box. */}
                             <div className="flex-grow overflow-y-auto relative min-h-0">
                                 <div className="grid grid-cols-5 h-full">
                                     {weekDays.map((day, dayIndex) => (
@@ -1159,12 +1209,10 @@
             
             const fetchData = async () => {
                 try {
-                    // Status line doesn't need auth, but endpoint requires headers.
-                    const headers = { 'X-User-Role': 'user', 'X-User-Username': 'status_check' };
                     const [climateRes, parkingRes, roomsRes] = await Promise.all([
-                        fetch('/api/climate/status'),
-                        fetch('/api/parking/all-spots'),
-                        fetch('/api/rooms/status', { headers })
+                        authenticatedFetch('/api/climate/status'),
+                        authenticatedFetch('/api/parking/all-spots'),
+                        authenticatedFetch('/api/rooms/status')
                     ]);
                     const climateData = climateRes.ok ? await climateRes.json() : null;
                     const parkingData = parkingRes.ok ? await parkingRes.json() : [];
@@ -1207,11 +1255,30 @@
             const [isLoggedIn, setIsLoggedIn] = React.useState(false);
             const [currentUser, setCurrentUser] = React.useState(null);
             const [currentView, setCurrentView] = React.useState('climate');
-
             const handleLoginSuccess = (user) => {
                 setCurrentUser(user);
                 setIsLoggedIn(true);
             };
+            const handleLogout = () => {
+                localStorage.removeItem('token');
+                setIsLoggedIn(false);
+                setCurrentUser(null);
+            };
+
+            React.useEffect(() => {
+                // This effect runs once when the app loads
+                const splashScreen = document.getElementById('splash-screen');
+                
+                // Set a timer to hide the splash screen after 2.5 seconds
+                const timer = setTimeout(() => {
+                  if (splashScreen) {
+                    splashScreen.classList.add('hidden');
+                  }
+                }, 2500); // 2.5 seconds
+
+                // Clean up the timer if the component unmounts
+                return () => clearTimeout(timer);
+            }, []); // The empty dependency array ensures this runs only once
 
             React.useEffect(() => {
                 const healthCheck = () => {
@@ -1226,7 +1293,11 @@
             }, []);
 
             if (!isLoggedIn) {
-                return <LoginPanel onLoginSuccess={handleLoginSuccess} />;
+                return (
+                    <div className="w-full h-screen flex items-center justify-center">
+                        <LoginPanel onLoginSuccess={handleLoginSuccess} />
+                    </div>
+                );
             }
 
             const renderView = () => {
@@ -1262,9 +1333,12 @@
 
             return (
                 <React.Fragment>
-                    <h1 className="text-7xl md:text-8xl font-bold text-cyan-400 mb-4 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>
-                        Officer
-                    </h1>
+                    <div className="flex justify-center items-center gap-6 mb-4">
+                        <img src="/static/logo.png" alt="Officer Logo" className="h-20 w-20" />
+                        <h1 className="text-7xl md:text-8xl font-bold text-cyan-400 text-center" style={{animation: 'text-cyan-glow-pulse 4s infinite ease-in-out'}}>
+                            Officer
+                        </h1>
+                    </div>
                     <div className="w-full max-w-screen-2xl mb-2">
                         <div className="grid grid-cols-3 items-center w-full mb-1 text-sm">
                             <div className="justify-self-start text-gray-500">
@@ -1274,7 +1348,7 @@
                                 <DigitalClock />
                             </div>
                             <div className="justify-self-end">
-                                <button onClick={() => { setIsLoggedIn(false); setCurrentUser(null); }} className="text-gray-500 hover:text-cyan-300">Logout</button>
+                                <button onClick={handleLogout} className="text-gray-500 hover:text-cyan-300">Logout</button>
                             </div>
                         </div>
                         <StatusLine currentUser={currentUser} />

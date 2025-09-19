@@ -1,23 +1,19 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import logging
 from bson import json_util
 import json
 
 from database import db
 from automation import process_event
+from auth import token_required, admin_required
 
 parking_bp = Blueprint('parking_bp', __name__)
 
-# Checks for user role
-def auth_required(): 
-    user_role = request.headers.get('X-User-Role')
-    if not user_role:
-        return False
-    return True
 def find_spot_by_id(spot_id):
     return db.parking_spots.find_one({'id': spot_id})
 
 @parking_bp.get('/api/parking/spots/available')
+@token_required
 def spots_available():
     logging.info("Parking: Available spots requested.")
     available_spots_cursor = db.parking_spots.find({'is_available': True})
@@ -25,6 +21,7 @@ def spots_available():
     return jsonify(all_available)
 
 @parking_bp.get('/api/parking/all-spots')
+@token_required
 def get_all_spots():
     detailed_spots = []
     for spot in db.parking_spots.find():
@@ -61,22 +58,18 @@ def _reserve_spot(spot_id, name):
     return f'Parking spot {spot_id} is reserved for {name}', 201
 
 @parking_bp.post('/api/parking/reserve')
+@token_required
 def reserve():
-    if not auth_required():
-        return jsonify({'error': 'Authentication required'}), 401
-
     data = request.get_json()
-    if not data or 'name' not in data or 'id' not in data:
-        return 'Missing name or id in request body', 400
+    if not data or 'id' not in data:
+        return 'Missing id in request body', 400
     
-    message, status_code = _reserve_spot(data['id'], data['name'])
+    message, status_code = _reserve_spot(data['id'], g.current_user['username'])
     return message, status_code
 
 @parking_bp.post('/api/parking/guest-pass')
+@token_required
 def guest_pass():
-    if not auth_required():
-        return jsonify({'error': 'Authentication required'}), 401
-
     data = request.get_json()
     if not data or 'id' not in data:
         return 'Missing id in request body', 400
@@ -84,27 +77,18 @@ def guest_pass():
     message, status_code = _reserve_spot(data['id'], "guest")
     return message, status_code
 
-# View my parking reservations
 @parking_bp.post('/api/parking/my-reservations')
+@token_required
 def my_reservations():
-    if not auth_required():
-        return jsonify({'error': 'Authentication required'}), 401
-
-    data = request.get_json()
-    if not data or 'name' not in data:
-        return jsonify({'error': 'Missing name in request body'}), 400
-    name = data['name']
-    
+    name = g.current_user['username']
     my_reservations_cursor = db.reservations.find({'name': name})
     my_res_ids = [r['id'] for r in my_reservations_cursor]
     logging.info(f"Parking: Reservations requested for '{name}'. Found: {my_res_ids}")
     return jsonify(my_res_ids)
 
 @parking_bp.post('/api/parking/clear-spot/<int:spot_id>')
+@admin_required
 def clear_spot(spot_id):
-    if request.headers.get('X-User-Role') != 'admin':
-        return jsonify({'error': 'Administrator access required'}), 403
-
     # Remove check-ins
     checkin_deleted = db.checkins.delete_one({'id': spot_id})
 
@@ -114,7 +98,7 @@ def clear_spot(spot_id):
     # Make the spot available
     db.parking_spots.update_one({'id': spot_id}, {'$set': {'is_available': True}})
 
-    admin_user = request.headers.get('X-User-Username', 'unknown_admin')
+    admin_user = g.current_user['username']
     logging.info(f"Parking: Spot {spot_id} was manually cleared by admin '{admin_user}'.")
     
     if checkin_deleted.deleted_count > 0 or reservations_deleted.deleted_count > 0:
@@ -123,16 +107,13 @@ def clear_spot(spot_id):
         return jsonify({'status': 'success', 'message': f'Spot {spot_id} is now available.'})
 
 @parking_bp.post('/api/parking/unreserve')
+@token_required
 def unreserve():
-    if not auth_required():
-        return jsonify({'error': 'Authentication required'}), 401
-
     data = request.get_json()
-    if not data or 'name' not in data or 'id' not in data:
-        return jsonify({'error': 'Missing name or id in request body'}), 400
-
+    if not data or 'id' not in data:
+        return jsonify({'error': 'Missing id in request body'}), 400
     spot_id = data['id']
-    name = data['name']
+    name = g.current_user['username']
 
     # Find the reservation
     reservation = db.reservations.find_one({'id': spot_id, 'name': name})
@@ -154,17 +135,13 @@ def unreserve():
     logging.info(f"Parking: Spot {spot_id} unreserved by '{name}'.")
     return jsonify({'status': 'success', 'message': f'Reservation for spot {spot_id} has been cancelled.'}), 200
 
-#* POST /api/parking/checkin Check into reserved spot
 @parking_bp.post('/api/parking/checkin')
+@token_required
 def checkin():
-    if not auth_required():
-        return jsonify({'error': 'Authentication required'}), 401
-
     data = request.get_json()
-    if not data or 'name' not in data or 'id' not in data:
-        return 'Missing name or id in request body', 400
-    
-    name = data['name']
+    if not data or 'id' not in data:
+        return 'Missing id in request body', 400
+    name = g.current_user['username']
     id_to_checkin = data['id']
 
     is_reserved = db.reservations.find_one({'name': name, 'id': id_to_checkin})
@@ -182,8 +159,8 @@ def checkin():
 
     return 'Checked in successfully', 201
 
-#* GET /api/parking/violations Check parking violations
 @parking_bp.get('/api/parking/violations')
+@admin_required
 def violations():
     spots_with_reservations = {}
     for r in db.reservations.find():

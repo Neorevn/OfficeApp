@@ -1,9 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import logging
 from datetime import datetime, timedelta, timezone
 import uuid
 
 from database import db
+from auth import token_required, admin_required
 
 meeting_rooms_bp = Blueprint('meeting_rooms_bp', __name__)
 
@@ -21,20 +22,9 @@ def serialize_booking(booking):
         serialized['end_time'] = serialized['end_time'].isoformat()
     return serialized
 
-def auth_required(role='any'):
-    user_role = request.headers.get('X-User-Role')
-    if not user_role:
-        return False, jsonify({'error': 'Authentication required'}), 401
-    if role == 'admin' and user_role != 'admin':
-        return False, jsonify({'error': 'Administrator access required'}), 403
-    return True, None, None
-
 @meeting_rooms_bp.route('/api/rooms/status', methods=['GET'])
+@token_required
 def get_all_rooms_status():
-    is_authed, err_response, status_code = auth_required()
-    if not is_authed:
-        return err_response, status_code
-
     try:
         rooms = list(db.meeting_rooms.find({}, {'_id': 0}))
         now = datetime.now(timezone.utc)
@@ -65,18 +55,15 @@ def get_all_rooms_status():
         return jsonify({'error': 'An internal error occurred'}), 500
 
 @meeting_rooms_bp.route('/api/rooms/book', methods=['POST'])
+@token_required
 def book_room():
-    is_authed, err_response, status_code = auth_required()
-    if not is_authed:
-        return err_response, status_code
-
     data = request.get_json()
     if not data or 'room_id' not in data or 'duration_minutes' not in data or 'start_time' not in data:
         return jsonify({'error': 'Missing room_id, start_time, or duration_minutes'}), 400
 
     room_id = data['room_id']
     duration = data['duration_minutes']
-    username = request.headers.get('X-User-Username')
+    username = g.current_user['username']
 
     try:
         # The 'Z' in javascript's toISOString isn't always parsed correctly, so we replace it.
@@ -116,32 +103,24 @@ def book_room():
     }), 201
 
 @meeting_rooms_bp.route('/api/rooms/cancel/<booking_id>', methods=['POST'])
+@token_required
 def cancel_booking(booking_id):
-    is_authed, err_response, status_code = auth_required()
-    if not is_authed:
-        return err_response, status_code
-
     booking = db.meeting_bookings.find_one({'booking_id': booking_id})
     if not booking:
         return jsonify({'error': 'Booking not found'}), 404
 
     # Admins can cancel any booking, users can only cancel their own
-    user_role = request.headers.get('X-User-Role')
-    username = request.headers.get('X-User-Username')
-    if user_role != 'admin' and booking['username'] != username:
+    if g.current_user['role'] != 'admin' and booking['username'] != g.current_user['username']:
         return jsonify({'error': 'You can only cancel your own bookings.'}), 403
 
     db.meeting_bookings.delete_one({'booking_id': booking_id})
-    logging.info(f"MeetingRooms: Booking {booking_id} was cancelled by '{username}'.")
+    logging.info(f"MeetingRooms: Booking {booking_id} was cancelled by '{g.current_user['username']}'.")
     return jsonify({'status': 'success', 'message': 'Booking cancelled successfully.'})
 
 @meeting_rooms_bp.route('/api/rooms/my-bookings', methods=['GET'])
+@token_required
 def get_my_bookings():
-    is_authed, err_response, status_code = auth_required()
-    if not is_authed:
-        return err_response, status_code
-
-    username = request.headers.get('X-User-Username')
+    username = g.current_user['username']
     now = datetime.now(timezone.utc)
 
     # Find active or future bookings for the user
@@ -153,11 +132,8 @@ def get_my_bookings():
     return jsonify([serialize_booking(b) for b in bookings])
 
 @meeting_rooms_bp.route('/api/rooms/bookings-for-week', methods=['GET'])
+@token_required
 def get_bookings_for_week():
-    is_authed, err_response, status_code = auth_required()
-    if not is_authed:
-        return err_response, status_code
-
     start_of_week_str = request.args.get('start_date')
     if not start_of_week_str:
         return jsonify({'error': 'start_date parameter is required'}), 400
