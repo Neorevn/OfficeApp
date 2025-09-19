@@ -14,7 +14,9 @@ def login():
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({'error': 'Missing username or password'}), 400
-    user = db.users.find_one({'username': data['username']})
+    
+    # Find user case-insensitively by using a regex with the 'i' option.
+    user = db.users.find_one({'username': {'$regex': f"^{data['username']}$", '$options': 'i'}})
     if not user or not check_password_hash(user['password'], data['password']):
         logging.warning(f"Auth: Failed login attempt for user '{data['username']}'.")
         return jsonify({'error': 'Invalid username or password'}), 401

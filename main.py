@@ -9,7 +9,8 @@ from climate import climate_bp
 from database import db
 from parking import parking_bp
 from automation import automation_bp, process_event
-from auth import auth_bp 
+from auth import auth_bp
+from meeting_rooms import meeting_rooms_bp
 
 # Load environment variables from .env file at the very beginning
 load_dotenv()
@@ -59,6 +60,18 @@ def initialize_database():
         ]
         db.automation_rules.insert_many(default_rules)
 
+    # Initialize Meeting Rooms
+    if db.meeting_rooms.count_documents({}) == 0:
+        logging.info("Application: Initializing meeting rooms...")
+        default_rooms = [
+            {'id': 1, 'name': 'Neo', 'capacity': 4, 'equipment': ['55" Display', 'Whiteboard']},
+            {'id': 2, 'name': 'Trinity', 'capacity': 8, 'equipment': ['75" Display', 'Whiteboard', 'Video Conferencing']},
+            {'id': 3, 'name': 'Morpheus', 'capacity': 12, 'equipment': ['Projector', 'Whiteboard', 'Conference Phone']},
+            {'id': 4, 'name': 'Smith', 'capacity': 4, 'equipment': ['55" Display', 'Whiteboard']},
+        ]
+        db.meeting_rooms.insert_many(default_rooms)
+        # Bookings collection will be created on first insert.
+
     # Initialize default Users
     if db.users.count_documents({}) == 0:
         logging.info("Application: Initializing users...")
@@ -91,6 +104,7 @@ def create_app():
     app.register_blueprint(parking_bp)
     app.register_blueprint(automation_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(meeting_rooms_bp)
 
     # Routes the root app to index.html
     @app.route('/')
