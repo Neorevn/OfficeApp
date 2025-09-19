@@ -117,4 +117,4 @@ if __name__ == '__main__':
     
     logging.warning("Application: Starting Officer application on port 5000...")    
     # Use debug=False to prevent the app from running twice (which duplicates scheduler jobs)
-    app.run(port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)

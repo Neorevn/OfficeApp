@@ -99,32 +99,72 @@ OfficeApp/
 
 ### Prerequisites
 
-- Python 3.x installed.
+- For local development: Python 3.x installed.
+- For Docker: Docker Desktop installed and running.
 - MongoDB instance (local or a cloud service like MongoDB Atlas).
 - A modern web browser (e.g., Chrome, Firefox, Edge).
 
-### Installation & Setup
+### 1. Configure the Database
 
-1.  **Configure the Database**:
-    - In the root of the `OfficeApp` directory, create a file named `.env`.
-    - Inside the `.env` file, add your MongoDB connection string like this:
-      ```
-      MONGO_URI="mongodb+srv://<username>:<password>@<cluster-address>/<database-name>?retryWrites=true&w=majority"
-      ```
-    - Replace the placeholders with your actual database credentials.
-2.  **Set up the Backend**:
-    - Open a terminal in the `OfficeApp` root directory.
-    *   **Install Dependencies**:
-        ```sh
-        pip install -r requirements.txt 
-        ```
-    *   **Run the Server**:
-        ```sh
-        python main.py
-        ```
-    This will start the unified server on `http://127.0.0.1:5000`. On the first run, it will automatically initialize the database with default users, parking spots, and automation rules.
+No matter how you run the application, you first need to configure your database connection.
 
-3.  **Launch the Frontend**:
-    - Open the `index.html` file directly in your web browser.
+1.  In the root of the `OfficeApp` directory, create a file named `.env`.
+2.  Inside the `.env` file, add your MongoDB connection string. **Do not include quotes.**
+    ```env
+    MONGO_URI=mongodb+srv://<username>:<password>@<cluster-address>/<database-name>?retryWrites=true&w=majority
+    ```
+3.  Replace the placeholders with your actual database credentials.
 
-You should now see the "Officer" login screen. You can log in with one of the default accounts (e.g., `admin1`/`adminpass1` or `user1`/`userpass1`).
+### 2. Running the Application
+
+You can run the application either locally using Python or containerized with Docker.
+
+#### Option A: Running with Docker (Recommended)
+
+This is the easiest and most consistent way to run the application.
+
+1.  **Build the Docker image:**
+    ```sh
+    docker build -t officer-app .
+    ```
+
+2.  **Run the container:**
+    This command maps port 5000 and securely passes your `.env` file to the container.
+    ```sh
+    docker run -p 5000:5000 --env-file ./.env officer-app
+    ```
+
+##### Development with Docker
+To avoid rebuilding the image on every code change, you can use a bind mount to sync your local code into the container.
+
+1.  **Start the container with a bind mount:**
+    ```sh
+    # We give it a name for easy restarts
+    docker run --name officer-dev -p 5000:5000 --env-file ./.env -v .:/app officer-app
+    ```
+2.  **Make code changes** on your local machine.
+3.  **Restart the container** to apply the changes (this is much faster than rebuilding):
+    ```sh
+    docker restart officer-dev
+    ```
+
+#### Option B: Running Locally (without Docker)
+
+1.  **Install Dependencies**:
+    ```sh
+    pip install -r requirements.txt 
+    ```
+
+2.  **Run the Server**:
+    ```sh
+    python main.py
+    ```
+    This will start the server on `http://localhost:5000`.
+
+### 3. Access and Login
+
+Once the application is running, open your browser and navigate to **`http://localhost:5000`**.
+
+You should see the "Officer" login screen. You can log in with one of the default accounts:
+-   **Admin**: `admin1` / `adminpass1`
+-   **User**: `user1` / `userpass1`

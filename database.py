@@ -10,6 +10,9 @@ if not uri:
     logging.error("FATAL: MONGO_URI environment variable not set.")
     raise ValueError("MONGO_URI environment variable not set. Please create a .env file with this variable.")
 
+# It's a common mistake to include quotes in the .env file. Let's strip them.
+uri = uri.strip().strip('"\'')
+
 # Create a new client and connect to the server
 client = MongoClient(uri, server_api=ServerApi('1'))
 
