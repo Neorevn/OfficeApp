@@ -43,7 +43,14 @@ The "Officer" dashboard integrates multiple control panels into a single, cohesi
     - Check-in to a reserved spot.
 - **Admin Override**: Administrators can manually clear any spot that is reserved or occupied.
 
-### 🤖 Automation Hub
+### 🤝 Meeting Room Management
+- **Visual Calendar**: A weekly calendar (Sunday-Thursday) displays all bookings with respect to the user's local timezone.
+- **Color-Coded Rooms**: Each meeting room is assigned a unique color for easy identification on the calendar.
+- **Flexible Booking**: Users can book any available room for a specific date, time, and duration.
+- **Live Availability**: The main status bar shows a real-time count of currently available rooms.
+- **Conflict Handling**: The system prevents double-booking and provides clear error messages.
+
+###  Automation Hub
 - **Dynamic Rule Engine**: Administrators can create complex, event-driven rules from the UI.
     - **Triggers**: `User Login`, `Parking Check-in`, `Motion Detected`.
     - **Actions**: `Turn Lights On/Off`, `Turn HVAC Off`.
@@ -77,7 +84,8 @@ OfficeApp/
 ├── auth.py             # Handles user authentication and management API
 ├── climate.py          # Handles environmental controls API
 ├── parking.py          # Handles parking management API
-└── automation.py       # Handles automation rules and events API
+├── automation.py       # Handles automation rules and events API
+└── meeting_rooms.py    # Handles meeting room booking API
 ```
 
 ## 🛠️ Tech Stack
