@@ -3,14 +3,24 @@ import logging
 from werkzeug.security import generate_password_hash, check_password_hash
 from bson import json_util
 import json
+from functools import wraps
 
 from database import db
-from automation import process_event
+
+def admin_required(f):
+    """Decorator to ensure the user has an 'admin' role."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if request.headers.get('X-User-Role') != 'admin':
+            return jsonify({'error': 'Administrator access required'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
 
 auth_bp = Blueprint('auth_bp', __name__)
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():
+    from automation import process_event
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({'error': 'Missing username or password'}), 400
@@ -29,17 +39,14 @@ def login():
     return json.loads(json_util.dumps({'status': 'success', 'user': user}))
 
 @auth_bp.route('/api/users/all', methods=['GET'])
+@admin_required
 def get_all_users():
-    if request.headers.get('X-User-Role') != 'admin':
-        return jsonify({'error': 'Administrator access required'}), 403
-    
     users = list(db.users.find({}, {'password': 0})) # Exclude passwords
     return json.loads(json_util.dumps(users))
 
 @auth_bp.route('/api/users/set-role', methods=['POST'])
+@admin_required
 def set_user_role():
-    if request.headers.get('X-User-Role') != 'admin':
-        return jsonify({'error': 'Administrator access required'}), 403
     data = request.get_json()
     if not data or 'username' not in data or 'role' not in data:
         return jsonify({'error': 'Missing username or role'}), 400
@@ -59,9 +66,8 @@ def set_user_role():
     return jsonify({'status': 'success', 'message': f"User '{username_to_change}' role updated to '{new_role}'."})
 
 @auth_bp.route('/api/users/create', methods=['POST'])
+@admin_required
 def create_user():
-    if request.headers.get('X-User-Role') != 'admin':
-        return jsonify({'error': 'Administrator access required'}), 403
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data or 'role' not in data:
         return jsonify({'error': 'Missing username, password, or role'}), 400
@@ -82,9 +88,8 @@ def create_user():
     return json.loads(json_util.dumps({'status': 'success', 'user': new_user})), 201
 
 @auth_bp.route('/api/users/change-password', methods=['POST'])
+@admin_required
 def change_user_password():
-    if request.headers.get('X-User-Role') != 'admin':
-        return jsonify({'error': 'Administrator access required'}), 403
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({'error': 'Missing username or new password'}), 400
@@ -96,10 +101,9 @@ def change_user_password():
     return jsonify({'status': 'success', 'message': f"Password for '{data['username']}' has been updated."})
 
 @auth_bp.route('/api/users/delete/<username>', methods=['DELETE'])
+@admin_required
 def delete_user(username):
     admin_username = request.headers.get('X-User-Username')
-    if request.headers.get('X-User-Role') != 'admin':
-        return jsonify({'error': 'Administrator access required'}), 403
     if username == admin_username:
         return jsonify({'error': 'Administrators cannot delete their own account.'}), 400
     user_to_delete = db.users.find_one({'username': username})

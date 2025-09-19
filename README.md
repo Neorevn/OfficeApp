@@ -143,8 +143,9 @@ This is the easiest and most consistent way to run the application.
     ```
 
 ##### Development with Docker
-To avoid rebuilding the image on every code change, you can use a bind mount to sync your local code into the container.
+To avoid rebuilding the image on every code change, you can use a bind mount to sync your local code into the container. This allows you to see updates by simply restarting the container.
 
+###### Using the Command Line (CLI)
 1.  **Start the container with a bind mount:**
     ```sh
     # We give it a name for easy restarts
@@ -155,6 +156,18 @@ To avoid rebuilding the image on every code change, you can use a bind mount to 
     ```sh
     docker restart officer-dev
     ```
+
+###### Using the Docker Desktop GUI
+1.  Go to the **Images** tab in Docker Desktop.
+2.  Find your `officer-app` image and click the **Run** button.
+3.  In the "Create new container" screen, click **Optional settings**.
+4.  Configure the following:
+    - **Container name**: Give it a memorable name, like `officer-dev-gui`.
+    - **Ports**: Set the "Host port" to `5000`.
+    - **Volumes**: For "Host path", browse to your project folder. For "Container path", enter `/app`.
+    - **Environment variables**: Browse and select your `.env` file. Which contains the `MONGO_URI`. Copy and paste it in the Value box and the Variable should be `MONGO_URI`.
+5.  Click **Run**.
+6.  To apply code changes, go to the **Containers** tab and click the **Restart** button on your running container.
 
 #### Option B: Running Locally (without Docker)
 

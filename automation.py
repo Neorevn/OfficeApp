@@ -4,6 +4,7 @@ from bson import json_util
 import json
 
 from database import db
+from auth import admin_required
 
 automation_bp = Blueprint('automation_bp', __name__)
 
@@ -19,6 +20,7 @@ def auth_required(role='any'):
     return True
 
 @automation_bp.route('/api/automation/rules/create', methods=['POST'])
+@admin_required
 def create_automation_rule():
     if not is_admin():
         return jsonify({'error': 'Administrator access required'}), 403   
@@ -45,6 +47,8 @@ def create_automation_rule():
     db.automation_rules.insert_one(new_rule)
     logging.info(f"Automation: Created new rule: {new_rule}")
     return json.loads(json_util.dumps(new_rule)), 201
+    new_rule.pop('_id', None)
+    return jsonify(new_rule), 201
 
 @automation_bp.route('/api/automation/rules', methods=['GET'])
 def get_all_rules():
@@ -52,6 +56,7 @@ def get_all_rules():
     return jsonify(rules)
 
 @automation_bp.route('/api/automation/rules/toggle/<int:rule_id>', methods=['POST'])
+@admin_required
 def toggle_rule(rule_id):
     if not is_admin():
         return jsonify({'error': 'Administrator access required'}), 403
@@ -66,8 +71,11 @@ def toggle_rule(rule_id):
     logging.info(f"Automation: Toggled rule {rule_id} to {'active' if new_active_state else 'inactive'}.")
     rule['active'] = new_active_state
     return json.loads(json_util.dumps(rule))
+    rule.pop('_id', None)
+    return jsonify(rule)
 
 @automation_bp.route('/api/automation/rules/delete/<int:rule_id>', methods=['DELETE'])
+@admin_required
 def delete_rule(rule_id):
     if not is_admin():
         return jsonify({'error': 'Administrator access required'}), 403
@@ -82,6 +90,7 @@ def delete_rule(rule_id):
 
 
 @automation_bp.route('/api/automation/scenes/create', methods=['POST'])
+@admin_required
 def create_environmental_scene():
     if not is_admin():
         return jsonify({'error': 'Administrator access required'}), 403
@@ -157,6 +166,7 @@ def trigger_motion():
     return jsonify({'message': f"Motion event in '{area}' processed."}), 200
 
 @automation_bp.route('/api/automation/rules/test/<int:rule_id>', methods=['POST'])
+@admin_required
 def test_rule(rule_id):
     if not is_admin():
         return jsonify({'error': 'Administrator access required'}), 403
@@ -180,3 +190,5 @@ def get_energy_savings():
 
     logging.info("Automation: Energy savings data requested.")
     return json.loads(json_util.dumps(energy_savings))
+    energy_savings.pop('_id', None)
+    return jsonify(energy_savings)

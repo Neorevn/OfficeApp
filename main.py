@@ -115,6 +115,7 @@ def create_app():
     @app.route('/health')
     def health_check():
         logging.warning("Application: Health check successful.")
+        logging.info("Application: Health check successful.")
         return jsonify({"status": "OK"}), 200
 
     return app
