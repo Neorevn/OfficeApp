@@ -72,8 +72,8 @@ def initialize_database():
 
     logging.info("Application: Database initialization check complete.")
 
+# Timer job to trigger automation events
 def time_trigger_job():
-    """Job to be run by the scheduler to check for time-based rules."""
     with app.app_context():
         current_time = datetime.now().strftime("%H:%M")
         process_event('time', {'time': current_time})
