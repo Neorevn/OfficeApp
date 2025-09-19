@@ -443,7 +443,7 @@
                         onClick={() => isClickable && setSelectedSpot(spot)}>
                         <div className="text-3xl">{icon}</div>
                         <div className="font-mono text-lg mt-1">{spot.id}</div>
-                        {spot.status === 'occupied' && currentUser.role === 'admin' && (
+                        {(spot.status === 'occupied' || spot.status === 'reserved') && currentUser.role === 'admin' && (
                             <button onClick={(e) => { e.stopPropagation(); handleClearSpot(spot.id); }} className="absolute bottom-1 right-1 bg-red-600/80 hover:bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
                                 Clear
                             </button>
@@ -546,15 +546,15 @@
                 // Polling removed to rely on action-based updates.
             }, []);
 
-            const handleApiCall = async (endpoint, body, successMessage) => {
+            const handleApiCall = async (method, endpoint, body, successMessage) => {
                 try {
                     const response = await fetch(endpoint, {
-                        method: 'POST',
+                        method: method,
                         headers: { 
                             'Content-Type': 'application/json',
                             'X-User-Role': currentUser.role
                         },
-                        body: JSON.stringify(body),
+                        body: body ? JSON.stringify(body) : undefined,
                     });
                     const responseData = await response.json();
                     if (!response.ok) {
@@ -572,11 +572,17 @@
             };
 
             const handleToggleRule = (ruleId) => {
-                handleApiCall(`/api/automation/rules/toggle/${ruleId}`, {}, 'Rule toggled!');
+                handleApiCall('POST', `/api/automation/rules/toggle/${ruleId}`, {}, 'Rule toggled!');
             };
 
             const handleTestRule = (rule) => {
-                handleApiCall(`/api/automation/rules/test/${rule.id}`, {}, `Test triggered for rule #${rule.id}.`);
+                handleApiCall('POST', `/api/automation/rules/test/${rule.id}`, {}, `Test triggered for rule #${rule.id}.`);
+            };
+
+            const handleDeleteRule = (ruleId) => {
+                if (confirm(`Are you sure you want to delete automation rule #${ruleId}? This cannot be undone.`)) {
+                    handleApiCall('DELETE', `/api/automation/rules/delete/${ruleId}`, null, `Rule #${ruleId} deleted.`);
+                }
             };
 
 
@@ -623,6 +629,7 @@
                                                     <React.Fragment>
                                                         <button onClick={() => handleTestRule(rule)} className="bg-transparent border border-cyan-400 text-cyan-400 text-sm font-bold py-1 px-3 rounded-md transition-all duration-300 hover:bg-cyan-400 hover:text-black">Test</button>
                                                         <button onClick={() => handleToggleRule(rule.id)} className={`py-1 px-3 rounded-md text-sm transition-all duration-300 ${rule.active ? 'bg-green-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>{rule.active ? 'On' : 'Off'}</button>
+                                                        <button onClick={() => handleDeleteRule(rule.id)} className="py-1 px-3 rounded-md text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-all duration-300">Delete</button>
                                                     </React.Fragment>
                                                 )}
                                             </div>
@@ -671,6 +678,9 @@
                 } else if (newTrigger === 'parking_checkin') {
                     setTriggerConditionKey('spot_id');
                     setTriggerConditionValue('1');
+                } else if (newTrigger === 'time') {
+                    setTriggerConditionKey('time');
+                    setTriggerConditionValue('19:00');
                 }
             };
 
@@ -679,6 +689,7 @@
                 if (triggerType === 'motion') return `When motion is detected in '${triggerConditionValue}', ${actionText}.`;
                 if (triggerType === 'user_login') return `When user '${triggerConditionValue}' logs in, ${actionText}.`;
                 if (triggerType === 'parking_checkin') return `When someone checks into parking spot ${triggerConditionValue}, ${actionText}.`;
+                if (triggerType === 'time') return `At ${triggerConditionValue} every day, ${actionText}.`;
                 return 'Custom rule';
             };
 
@@ -710,14 +721,17 @@
                 if (triggerType === 'user_login') {
                     return <select value={triggerConditionValue} onChange={e => setTriggerConditionValue(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400">{allUsers.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}</select>;
                 }
+                if (triggerType === 'time') {
+                    return <input type="time" value={triggerConditionValue} onChange={e => setTriggerConditionValue(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400" />;
+                }
                 return <input type="text" value={triggerConditionValue} onChange={e => setTriggerConditionValue(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400" />;
             };
 
             return (
                 <div className="bg-black/30 p-4 rounded-xl border border-fuchsia-500/30 shadow-fuchsia-glow mb-6">
                     <h3 className="text-2xl font-semibold text-fuchsia-400 mb-4">Create New Automation Rule</h3>
-                    <form onSubmit={handleCreateRule} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <select value={triggerType} onChange={handleTriggerChange} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="motion">Motion Detected</option><option value="user_login">User Logs In</option><option value="parking_checkin">Parking Check-in</option></select>
+                    <form onSubmit={handleCreateRule} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end text-white">
+                        <select value={triggerType} onChange={handleTriggerChange} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="motion">Motion Detected</option><option value="user_login">User Logs In</option><option value="parking_checkin">Parking Check-in</option><option value="time">Time of Day</option></select>
                         {renderConditionInput()}
                         <select value={actionType} onChange={e => setActionType(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="lights_on">Turn Lights On</option><option value="lights_off">Turn Lights Off</option><option value="hvac_off">Turn HVAC Off</option></select>
                         <button type="submit" className="bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black">Create Rule</button>
@@ -768,11 +782,11 @@
                             'X-User-Username': currentUser.username,
                             'X-User-Role': currentUser.role
                         },
-                        body: JSON.stringify({ username, role: newRole })
+                        body: body ? JSON.stringify(body) : undefined
                     });
                     const data = await response.json();
-                    if (!response.ok) throw new Error(data.error || 'Failed to set role.');
-                    setMessage(data.message);
+                    if (!response.ok) throw new Error(data.error || 'API call failed.');
+                    if (data.message) setMessage(data.message);
                     setTimeout(() => setMessage(null), 3000);
                     if (successCallback) successCallback();
                     await fetchUsers();
@@ -783,7 +797,7 @@
             };
 
             const handleSetRole = (username, role) => {
-                handleApiCall('POST', '/api/users/set-role', { username, role });
+                handleApiCall('POST', '/api/users/set-role', { username, role: role });
             };
 
             const handleCreateUser = (e) => {
@@ -805,7 +819,7 @@
 
             const handleDeleteUser = (username) => {
                 if (confirm(`Are you sure you want to delete the user "${username}"? This action cannot be undone.`)) {
-                    handleApiCall('DELETE', `/api/users/delete/${username}`);
+                    handleApiCall('DELETE', `/api/users/delete/${username}`, null);
                 }
             };
 

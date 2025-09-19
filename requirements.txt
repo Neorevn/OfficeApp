@@ -2,4 +2,4 @@ Flask
 Flask-Cors
 pymongo
 python-dotenv
-werkzeug
+APScheduler

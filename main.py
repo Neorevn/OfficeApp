@@ -3,11 +3,13 @@ from flask_cors import CORS
 import logging
 from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
+from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
 from climate import climate_bp
 from database import db
 from parking import parking_bp
-from automation import automation_bp
-from auth import auth_bp
+from automation import automation_bp, process_event
+from auth import auth_bp 
 
 # Load environment variables from .env file at the very beginning
 load_dotenv()
@@ -36,9 +38,24 @@ def initialize_database():
     if db.automation_rules.count_documents({}) == 0:
         logging.info("Application: Initializing default automation rules...")
         default_rules = [
-            {'id': 1, 'trigger': 'motion', 'action': 'lights_on', 'area': 'main_office', 'active': True, 'description': "When motion is detected in the Main Office, turn the lights on."},
-            {'id': 2, 'trigger': 'motion', 'action': 'lights_off', 'area': 'meeting_room_empty', 'active': True, 'description': "When meeting room is empty (simulated via motion trigger), turn lights off."},
-            {'id': 3, 'trigger': 'time', 'action': 'hvac_off', 'area': 'after_hours', 'active': False, 'description': "Turn off HVAC after business hours (7 PM) (simulated via trigger)."}
+            {
+                'id': 1, 
+                'trigger': {'type': 'motion', 'condition': {'area': 'main_office'}}, 
+                'action': {'type': 'lights_on'}, 
+                'active': True, 
+                'description': "When motion is detected in the Main Office, turn the lights on."
+            },
+            {
+                'id': 2, 
+                'trigger': {'type': 'motion', 'condition': {'area': 'meeting_room_empty'}}, 
+                'action': {'type': 'lights_off'}, 
+                'active': True, 
+                'description': "When meeting room is empty (simulated via motion trigger), turn lights off."
+            },
+            {
+                'id': 3, 'trigger': {'type': 'time', 'condition': {'time': '19:00'}}, 
+                'action': {'type': 'hvac_off'}, 'active': False, 'description': "Turn off HVAC after business hours (7 PM)."
+            }
         ]
         db.automation_rules.insert_many(default_rules)
 
@@ -54,6 +71,12 @@ def initialize_database():
         db.users.insert_many(users_to_create)
 
     logging.info("Application: Database initialization check complete.")
+
+def time_trigger_job():
+    """Job to be run by the scheduler to check for time-based rules."""
+    with app.app_context():
+        current_time = datetime.now().strftime("%H:%M")
+        process_event('time', {'time': current_time})
 
 def create_app():
     app = Flask(__name__, static_folder='.', static_url_path='')
@@ -84,6 +107,14 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    initialize_database()
-    logging.warning("Application: Starting Officer application on port 5000...")
-    app.run(port=5000, debug=True)
+    with app.app_context():
+        initialize_database()
+
+    # Initialize and start the scheduler
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(time_trigger_job, 'cron', minute='*')
+    scheduler.start()
+    
+    logging.warning("Application: Starting Officer application on port 5000...")    
+    # Use debug=False to prevent the app from running twice (which duplicates scheduler jobs)
+    app.run(port=5000, debug=False)

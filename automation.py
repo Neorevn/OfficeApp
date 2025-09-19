@@ -67,6 +67,20 @@ def toggle_rule(rule_id):
     rule['active'] = new_active_state
     return json.loads(json_util.dumps(rule))
 
+@automation_bp.route('/api/automation/rules/delete/<int:rule_id>', methods=['DELETE'])
+def delete_rule(rule_id):
+    if not is_admin():
+        return jsonify({'error': 'Administrator access required'}), 403
+    
+    result = db.automation_rules.delete_one({'id': rule_id})
+    
+    if result.deleted_count == 0:
+        return jsonify({'error': 'Rule not found'}), 404
+        
+    logging.info(f"Automation: Rule {rule_id} was deleted by an admin.")
+    return jsonify({'status': 'success', 'message': f"Rule #{rule_id} has been deleted."})
+
+
 @automation_bp.route('/api/automation/scenes/create', methods=['POST'])
 def create_environmental_scene():
     if not is_admin():
@@ -94,9 +108,19 @@ def process_event(event_type, event_data={}):
         is_match = True
         # Check if all conditions in the rule are met by the event data
         for key, value in conditions.items():
-            if event_data.get(key) != value:
+            event_value = event_data.get(key)
+            # Robust comparison to handle type mismatches (e.g., '14' vs 14)
+            if event_value is None:
                 is_match = False
-                break       
+                break
+            try:
+                # Attempt to compare values of the same type
+                if type(event_value)(value) != event_value:
+                    is_match = False
+                    break
+            except (ValueError, TypeError):
+                is_match = False
+                break
         if is_match:
             action_type = rule.get('action', {}).get('type')
             if action_type:
@@ -151,7 +175,6 @@ def get_energy_savings():
     # In a real app, this would be calculated. For now, we'll just return the placeholder.
     energy_savings = db.energy_savings.find_one({'_id': 'office'})
     if not energy_savings:
-        # Initialize if it doesn't exist
         db.energy_savings.insert_one({'_id': 'office', 'hvac_runtime_reduced_hours': 0, 'lights_off_hours': 0})
         energy_savings = db.energy_savings.find_one({'_id': 'office'})
 
