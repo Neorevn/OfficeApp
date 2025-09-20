@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import logging
 import os
@@ -6,13 +6,13 @@ from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
 from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
-from climate import climate_bp
-from database import db
-from parking import parking_bp
-from automation import automation_bp, process_event
-from auth import auth_bp
-from meeting_rooms import meeting_rooms_bp
-from wellnes import wellness_bp
+from Backend.climate import climate_bp
+from Backend.database import db
+from Backend.parking import parking_bp
+from Backend.automation import automation_bp, process_event
+from Backend.auth import auth_bp
+from Backend.meeting_rooms import meeting_rooms_bp
+from Backend.wellness import wellness_bp
 
 # Load environment variables from .env file.
 load_dotenv()
@@ -86,6 +86,7 @@ def initialize_database():
         db.users.insert_many(users_to_create)
 
     # Initialize Wellness Collections
+    # Check if the collection exists before trying to create it
     if 'wellness_checkins' not in db.list_collection_names():
         logging.info("Application: Creating 'wellness_checkins' collection with TTL index...")
         wellness_checkins = db.create_collection('wellness_checkins')
@@ -121,7 +122,7 @@ def initialize_database():
     logging.info("Application: Database initialization check complete.")
 
 def create_app():
-    app = Flask(__name__, static_folder='.', static_url_path='')
+    app = Flask(__name__, static_folder='dist', static_url_path='')
     CORS(app)
 
     # Set the secret key required for JWT signing
@@ -141,21 +142,24 @@ def create_app():
     app.register_blueprint(meeting_rooms_bp)
     app.register_blueprint(wellness_bp)
 
-    # Routes the root app to index.html
+    # This error handler is the key to integrating the React SPA.
+    # If a route is not found by the server (i.e., it's not an API route and not a static file),
+    # this handler will serve the main index.html. React Router will then take over on the client-side.
+    @app.errorhandler(404)
+    def not_found_error(error):
+        if not request.path.startswith('/api/'):
+            return app.send_static_file('index.html')
+        return jsonify(error='Not Found'), 404
+
+    # A specific route for the root URL to serve the app.
     @app.route('/')
-    def serve_index():
+    def index():
         return app.send_static_file('index.html')
 
-    # Respods to health checks from index.html
     @app.route('/health')
     def health_check():
         logging.info("Application: Health check successful.")
         return jsonify({"status": "OK"}), 200
-
-    # Route to serve the favicon and prevent 404 errors in browser logs
-    @app.route('/favicon.ico')
-    def favicon():
-        return app.send_static_file('static/logo.png')
 
     # This check is important to prevent the scheduler from running multiple times in debug mode.
     if app.config.get('SCHEDULER_RUNNING'):

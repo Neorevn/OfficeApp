@@ -16,6 +16,7 @@ services:
     ports:
       - 5000:5000
     volumes:
-      - .:/app # Mount local code for development
+      - ./main.py:/app/main.py # Mounts the main entrypoint for live changes
+      - ./Backend:/app/Backend # Mounts the backend package for live changes
 # The 'db' and 'volumes' sections have been removed as we are using a cloud database.
 # Ensure your .env file has the correct MONGO_URI for your cloud instance.

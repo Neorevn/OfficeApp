@@ -3,8 +3,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 import uuid
 
-from database import db
-from auth import token_required, admin_required
+from .database import db
+from .auth import token_required
 
 meeting_rooms_bp = Blueprint('meeting_rooms_bp', __name__)
 

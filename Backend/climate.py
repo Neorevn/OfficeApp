@@ -3,8 +3,8 @@ import logging
 from bson import json_util
 import json
 
-from database import db
-from auth import token_required
+from .database import db
+from .auth import token_required
 
 climate_bp = Blueprint('climate_bp', __name__)
 

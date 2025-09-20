@@ -3,8 +3,8 @@ import logging
 from bson import json_util
 import json
 
-from database import db
-from auth import admin_required, token_required
+from .database import db
+from .auth import admin_required, token_required
 
 automation_bp = Blueprint('automation_bp', __name__)
 
@@ -128,7 +128,7 @@ def _action_reserve_parking(params, event_data):
     spot_id = params.get('spot_id')
     username = event_data.get('username')
     if not spot_id or not username:
-        logging.warning(f"Automation: 'reserve_parking' action missing spot_id or username context.")
+        logging.warning("Automation: 'reserve_parking' action missing spot_id or username context.")
         return
 
     spot = db.parking_spots.find_one({'id': int(spot_id)})
@@ -142,7 +142,7 @@ def _action_reserve_parking(params, event_data):
 def _action_clear_parking(params, event_data):
     spot_id = params.get('spot_id')
     if not spot_id:
-        logging.warning(f"Automation: 'clear_parking' action missing spot_id.")
+        logging.warning("Automation: 'clear_parking' action missing spot_id.")
         return
     spot_id = int(spot_id)
     db.checkins.delete_one({'id': spot_id})

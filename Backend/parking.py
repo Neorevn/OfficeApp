@@ -3,9 +3,9 @@ import logging
 from bson import json_util
 import json
 
-from database import db
-from automation import process_event
-from auth import token_required, admin_required
+from .database import db
+from .automation import process_event
+from .auth import token_required, admin_required
 
 parking_bp = Blueprint('parking_bp', __name__)
 

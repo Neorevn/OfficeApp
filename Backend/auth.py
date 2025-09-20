@@ -7,7 +7,7 @@ from functools import wraps
 import jwt
 from datetime import datetime, timedelta
 
-from database import db
+from .database import db
 
 def token_required(f):
     """Decorator to ensure a valid JWT is present."""
@@ -49,7 +49,7 @@ auth_bp = Blueprint('auth_bp', __name__)
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():
     # Import here to avoid circular dependency with automation.py
-    from automation import process_event
+    from .automation import process_event
 
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data:

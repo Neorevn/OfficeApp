@@ -2,8 +2,8 @@ from flask import Blueprint, request, jsonify, g
 import random
 from datetime import datetime, timezone
 
-from auth import token_required
-from database import db
+from .auth import token_required
+from .database import db
 
 wellness_bp = Blueprint('wellness_bp', __name__)
 

@@ -71,7 +71,7 @@ The "Officer" dashboard integrates multiple control panels into a single, cohesi
 This project follows a monolithic backend architecture with a modular design, serving a single-page application (SPA) frontend.
 
 -   **Backend (Flask)**: The core application is a Flask server that acts as a unified API gateway. Functionality is broken down into distinct modules using **Flask Blueprints** (`auth`, `climate`, `parking`, `automation`), promoting separation of concerns and maintainability.
--   **Frontend (React)**: The user interface is a single `index.html` file powered by React (using JSX transpiled in the browser via Babel). This creates a dynamic and responsive dashboard without requiring a separate frontend build step, making it simple to run.
+-   **Frontend (React + Vite)**: The user interface is a modern Single-Page Application built with React and Vite. Vite compiles and bundles all frontend assets into highly optimized static files, which are then served by the Flask backend. This provides a fast, efficient user experience and a powerful development environment with Hot Module Replacement (HMR).
 -   **Security**: Authentication is handled via JSON Web Tokens (JWT). The backend issues a signed token on login, which the frontend then includes in the `Authorization` header for all subsequent API requests. This ensures every protected endpoint verifies the user's identity and role on the server.
 -   **Database (MongoDB)**: A single MongoDB database (`office_app_db`) persists all application state, from user credentials to parking spot status and automation rules.
 -   **Communication**: The frontend communicates with the backend via a RESTful API. All API endpoints are consolidated under the `/api/` prefix.
@@ -101,7 +101,7 @@ OfficeApp/
 ## 🛠️ Tech Stack
 
 - **Frontend:**
-    - **React**: For building the dynamic user interface.
+    - **React & Vite**: For a modern, fast, and scalable user interface.
     - **Tailwind CSS**: For rapid, utility-first styling.
     - **HTML/CSS/JavaScript (ES6+)**: The core web technologies.
 - **Backend:**
@@ -119,7 +119,7 @@ OfficeApp/
 
 ### Prerequisites
 
-- For local development: Python 3.x installed.
+- For local development: Python 3.x and Node.js (with npm) installed.
 - For Docker: Docker Desktop installed and running.
 - MongoDB instance (local or a cloud service like MongoDB Atlas).
 - A modern web browser (e.g., Chrome, Firefox, Edge).
@@ -147,12 +147,12 @@ No matter how you run the application, you first need to configure your database
 
 You can run the application either locally using Python or containerized with Docker.
 
-#### Option A: Running with Docker (Recommended)
+#### Option A: Running with Docker for Production (Recommended)
 
-This is the easiest way to run the application in a containerized environment.
+This method builds the optimized frontend and serves it from the Python backend, simulating a production environment.
 
 1.  **Build and run the services:**
-    This single command builds the image and starts the Flask server. The server will connect to the cloud database you configured in your `.env` file.
+    This single command performs a multi-stage build: it builds the frontend assets and then copies them into the final Python image.
     ```sh
     docker compose up --build
     ```
@@ -161,40 +161,36 @@ This is the easiest way to run the application in a containerized environment.
     docker compose down
     ```
 
-Because the `compose.yaml` is configured with a volume mount, any changes you make to the Python code on your local machine will be reflected inside the container. Simply restart the container to apply them:
-`docker compose restart server`
+#### Option B: Running Locally for Development
 
-###### Using the Docker Desktop GUI
+This is the recommended workflow for active development, as it provides hot-reloading for the frontend. You will run two separate processes in two separate terminals.
 
-**Note:** This method requires manual configuration each time you create a container. Using the `docker compose up` command line method above is recommended as it automates these steps.
-
-1.  Go to the **Images** tab in Docker Desktop.
-2.  Find your `officer-app` image and click the **Run** button.
-3.  In the "Create new container" screen, click **Optional settings**.
-4.  Configure the following:
-    - **Container name**: Give it a memorable name, like `officer-dev-gui`.
-    - **Ports**: Set the "Host port" to `5000`.
-    - **Volumes**: For "Host path", browse to your project folder. For "Container path", enter `/app`. This syncs your local code into the container.
-    - **Environment variables**: Manually add two variables: `MONGO_URI` and `SECRET_KEY`, copying the values from your `.env` file.
-5.  Click **Run**.
-6.  To apply code changes, go to the **Containers** tab and click the **Restart** button on your running container.
-
-#### Option B: Running Locally (without Docker)
-
-1.  **Install Dependencies**:
+1.  **Terminal 1: Start the Backend Server**
+    From the project root (`OfficeApp/`):
     ```sh
-    pip install -r requirements.txt 
-    ```
-
-2.  **Run the Server**:
-    ```sh
+    # Install Python dependencies
+    pip install -r requirements.txt
+    # Run the Flask server
     python main.py
     ```
-    This will start the server on `http://localhost:5000`.
+    The backend will be running on `http://localhost:5000`.
+
+2.  **Terminal 2: Start the Frontend Dev Server**
+    Navigate into the new `frontend` directory:
+    ```sh
+    cd frontend
+    # Install Node.js dependencies
+    npm install
+    # Run the Vite dev server
+    npm run dev
+    ```
+    The frontend dev server will start, likely on `http://localhost:5173`.
 
 ### 3. Access and Login
 
-Once the application is running, open your browser and navigate to **`http://localhost:5000`**.
+Once the application is running (using either Docker or the local dev setup), open your browser and navigate to the appropriate URL:
+-   **Docker/Production**: `http://localhost:5000`
+-   **Local Development**: `http://localhost:5173` (or whatever URL your Vite server indicates)
 
 You should see the "Officer" login screen. You can log in with one of the default accounts:
 -   **Admin**: `admin1` / `adminpass1`
