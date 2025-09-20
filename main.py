@@ -3,7 +3,7 @@ from flask_cors import CORS
 import logging
 import os
 from werkzeug.security import generate_password_hash
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
 from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from climate import climate_bp
@@ -12,6 +12,7 @@ from parking import parking_bp
 from automation import automation_bp, process_event
 from auth import auth_bp
 from meeting_rooms import meeting_rooms_bp
+from wellnes import wellness_bp
 
 # Load environment variables from .env file.
 load_dotenv()
@@ -84,6 +85,39 @@ def initialize_database():
         ]
         db.users.insert_many(users_to_create)
 
+    # Initialize Wellness Collections
+    if 'wellness_checkins' not in db.list_collection_names():
+        logging.info("Application: Creating 'wellness_checkins' collection with TTL index...")
+        wellness_checkins = db.create_collection('wellness_checkins')
+        # Create a TTL index to automatically delete documents after 7 days (604800 seconds)
+        wellness_checkins.create_index("createdAt", expireAfterSeconds=604800)
+
+    if db.mental_health_resources.count_documents({}) == 0:
+        logging.info("Application: Initializing mental health resources...")
+        default_resources = [
+            {
+                '_id': 'stress',
+                'resources': [
+                    "Breathing exercises",
+                    "5-minute meditation",
+                    "Meeting with counselor"
+                ]
+            },
+            {
+                '_id': 'tired',
+                'resources': [
+                    "Take a break",
+                    "Go outside for fresh air",
+                    "Drink water"
+                ]
+            },
+            {
+                '_id': 'sad',
+                'resources': ["Talk to a friend", "Call emergency line: 1201", "Request meeting with psychologist"]
+            }
+        ]
+        db.mental_health_resources.insert_many(default_resources)
+
     logging.info("Application: Database initialization check complete.")
 
 def create_app():
@@ -105,6 +139,7 @@ def create_app():
     app.register_blueprint(automation_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(meeting_rooms_bp)
+    app.register_blueprint(wellness_bp)
 
     # Routes the root app to index.html
     @app.route('/')
@@ -122,6 +157,10 @@ def create_app():
     def favicon():
         return app.send_static_file('static/logo.png')
 
+    # This check is important to prevent the scheduler from running multiple times in debug mode.
+    if app.config.get('SCHEDULER_RUNNING'):
+        return app
+
     # --- Scheduler Setup ---
     # We define the jobs here so they have access to the 'app' context.
     def time_trigger_job():
@@ -138,14 +177,13 @@ def create_app():
             if result.deleted_count > 0:
                 logging.info(f"Scheduler: Cleaned up {result.deleted_count} old meeting room booking(s).")
 
-    # Initialize and start the scheduler only if it's not already running
-    # This check is important to prevent the scheduler from running multiple times in debug mode.
-    if not app.config.get('SCHEDULER_RUNNING'):
-        scheduler = BackgroundScheduler(daemon=True)
-        scheduler.add_job(time_trigger_job, 'cron', minute='*')
-        scheduler.add_job(cleanup_old_bookings_job, 'cron', hour='*')
-        scheduler.start()
-        app.config['SCHEDULER_RUNNING'] = True
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(time_trigger_job, 'cron', minute='*')
+    # Run cleanup job every minute for more responsive calendar updates
+    scheduler.add_job(cleanup_old_bookings_job, 'cron', minute='*')
+    scheduler.start()
+    app.config['SCHEDULER_RUNNING'] = True
+    logging.info("Application: Background scheduler started.")
 
     return app
 

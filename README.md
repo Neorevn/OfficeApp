@@ -57,6 +57,13 @@ The "Officer" dashboard integrates multiple control panels into a single, cohesi
     - **Actions**: `Turn Lights On/Off`, `Turn HVAC Off`.
 - **Energy Savings**: Monitor estimated energy savings achieved through automation.
 
+### ❤️ Wellness Hub
+- **Daily Check-in**: Users can log their daily mood, energy, and stress levels using an interactive UI.
+- **Intelligent Feedback**: The system analyzes check-ins to provide immediate, contextual advice. For high stress or low mood/energy, it discreetly suggests support resources by logging them to the browser console for privacy.
+- **Office Vitals**: Monitor real-time office vitals like Air Quality (CO₂, Temperature, Humidity) and Noise Levels. The vitals auto-refresh periodically.
+- **Ergonomics & Breaks**: Get on-demand ergonomic tips or set reminders to take a break.
+- **Confidential Support**: A dedicated button provides discreet access to mental health support resources.
+
 ---
 
 ## 🏛️ Architecture
@@ -87,7 +94,8 @@ OfficeApp/
 ├── climate.py          # Handles environmental controls API
 ├── parking.py          # Handles parking management API
 ├── automation.py       # Handles automation rules and events API
-└── meeting_rooms.py    # Handles meeting room booking API
+├── meeting_rooms.py    # Handles meeting room booking API
+└── wellnes.py          # Handles wellness and office vitality API
 ```
 
 ## 🛠️ Tech Stack

@@ -1,58 +1,76 @@
-from flask import Flask, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 
-app = Flask(__name__)
+from auth import token_required
+from database import db
 
+wellness_bp = Blueprint('wellness_bp', __name__)
 
-data = []
-
-
-# 1. Daily employee check-in
-@app.route('/api/wellness/checkin', methods=['POST'])
+@wellness_bp.route('/api/wellness/checkin', methods=['POST'])
+@token_required
 def checkin():
     info = request.json
-
-    name = info['name']
+    if not info or 'mood' not in info or 'energy' not in info or 'stress' not in info:
+        return jsonify({'error': 'Missing mood, energy, or stress level'}), 400
+    
+    username = g.current_user['username']
     mood = info['mood']
     energy = info['energy']
     stress = info['stress']
 
     record = {
-        'name': name,
+        'username': username,
         'mood': mood,
         'energy': energy,
         'stress': stress,
-        'time': str(datetime.now())
+        'createdAt': datetime.now(timezone.utc) # Use UTC for consistency and TTL index
     }
-    data.append(record)
+    db.wellness_checkins.insert_one(record)
 
-    # Give advice
+    # Give advice and check for mental health triggers
     advice = []
+    identified_problems = []
+    support_resources = {}
+
     if stress > 7:
-        advice.append("Take a break!")
+        advice.append("High stress detected. Consider taking a short break or a walk.")
+        identified_problems.append('stress')
     if energy < 4:
-        advice.append("Drink coffee or go for a walk")
+        advice.append("Low energy. A quick coffee or some fresh air might help.")
+        identified_problems.append('tired')
     if mood < 5:
-        advice.append("Talk to a friend")
+        advice.append("Feeling down? Reaching out to a friend or colleague can make a difference.")
+        identified_problems.append('sad')
+
+    # If any problems were identified, fetch the corresponding support resources
+    if identified_problems:
+        for problem in identified_problems:
+            resource_doc = db.mental_health_resources.find_one({'_id': problem})
+            if resource_doc and 'resources' in resource_doc:
+                support_resources[problem] = resource_doc['resources']
 
     return jsonify({
-        'message': 'Thank you! I received your check-in',
-        'advice': advice
+        'message': 'Thank you! Your check-in has been recorded.',
+        'advice': advice,
+        'support_resources': support_resources
     })
 
 
-# 2. Check office air quality
-@app.route('/api/wellness/air-quality', methods=['GET'])
+@wellness_bp.route('/api/wellness/air-quality', methods=['GET'])
+@token_required
 def air_quality():
     # Generate random numbers (instead of real sensors)
+    office_state = db.state.find_one({'_id': 'office'}) or {}
+
     co2 = random.randint(400, 1000)
-    temp = random.randint(20, 26)
-    humidity = random.randint(40, 70)
+    # Get real temperature and humidity from the climate system state
+    temp = office_state.get('temperature', 21)
+    humidity = random.randint(40, 70) # Humidity sensor is not in climate system, so it remains random
 
     status = "Good"
     if co2 > 800:
-        status = "Bad - High CO2 levels"
+        status = "Poor - High CO2 levels"
     if temp > 25:
         status = "Too hot"
 
@@ -64,8 +82,8 @@ def air_quality():
     })
 
 
-# 3. Check office noise levels
-@app.route('/api/wellness/noise-levels', methods=['GET'])
+@wellness_bp.route('/api/wellness/noise-levels', methods=['GET'])
+@token_required
 def noise():
     noise_level = random.randint(30, 80)
 
@@ -82,12 +100,12 @@ def noise():
     })
 
 
-# 4. Break reminder
-@app.route('/api/wellness/break-reminder', methods=['POST'])
+@wellness_bp.route('/api/wellness/break-reminder', methods=['POST'])
+@token_required
 def break_reminder():
     info = request.json
-    name = info['name']
-    minutes = info.get('minutes', 60)  # How many minutes between breaks
+    name = g.current_user['username']
+    minutes = info.get('minutes', 60)
 
     return jsonify({
         'message': f"Hi {name}! I'll remind you to take a break every {minutes} minutes",
@@ -99,8 +117,8 @@ def break_reminder():
     })
 
 
-# 5. Check chair and desk ergonomics
-@app.route('/api/wellness/ergonomics/check', methods=['GET'])
+@wellness_bp.route('/api/wellness/ergonomics/check', methods=['GET'])
+@token_required
 def ergonomics():
     chair_ok = random.choice([True, False])
     desk_height_ok = random.choice([True, False])
@@ -127,47 +145,27 @@ def ergonomics():
     })
 
 
-# 6. Mental health support
-@app.route('/api/wellness/mental-health/support', methods=['POST'])
+@wellness_bp.route('/api/wellness/mental-health/support', methods=['POST'])
+@token_required
 def mental_health():
     info = request.json
-    name = info['name']
+    name = g.current_user['username']
     problem = info.get('problem', 'general')
 
-    resources = {
-        'stress': [
-            "Breathing exercises",
-            "5-minute meditation",
-            "Meeting with counselor"
-        ],
-        'tired': [
-            "Take a break",
-            "Go outside for fresh air",
-            "Drink water"
-        ],
-        'sad': [
-            "Talk to a friend",
-            "Call emergency line: 1201",
-            "Request meeting with psychologist"
-        ]
-    }
+    # Fetch resources from the database
+    resource_doc = db.mental_health_resources.find_one({'_id': problem})
 
-    help_options = resources.get(problem, [
-        "We are here for you",
-        "Talk to us anytime",
-        "Help line: 1201"
-    ])
+    if resource_doc and 'resources' in resource_doc:
+        help_options = resource_doc['resources']
+    else:
+        # Fallback to a generic message if the specific problem is not found
+        help_options = [
+            "We are here for you.",
+            "Please contact HR for support options."
+        ]
 
     return jsonify({
         'message': f"Hi {name}, we are here to help!",
         'help': help_options,
-        'emergency': "In emergency: 100 or 1201"
+        'emergency': "In emergency call: 100 or 1201"
     })
-
-
-
-
-if __name__ == '__main__':
-    print("The system is starting to work! 🚀")
-    app.run(port=5003)
-

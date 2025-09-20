@@ -1238,6 +1238,170 @@
             );
         };
 
+        // --- Wellness Panel ---
+        const WellnessPanel = ({ currentUser }) => {
+            const [checkin, setCheckin] = React.useState({ mood: 5, energy: 5, stress: 5 });
+            const [airQuality, setAirQuality] = React.useState(null);
+            const [noise, setNoise] = React.useState(null);
+            const [ergonomics, setErgonomics] = React.useState(null);
+            const [loading, setLoading] = React.useState({ air: false, noise: false, ergo: false, checkin: false });
+            const [error, setError] = React.useState(null);
+            const [message, setMessage] = React.useState(null);
+
+            React.useEffect(() => {
+                // Initial fetch
+                fetchAirQuality();
+                fetchNoise();
+
+                // Set up interval to fetch every 5 minutes
+                const intervalId = setInterval(() => {
+                    fetchAirQuality();
+                    fetchNoise();
+                }, 300000); // 5 minutes
+
+                return () => clearInterval(intervalId);
+            }, []);
+
+            const handleApiCall = async (endpoint, options, loadingKey) => {
+                setLoading(prev => ({ ...prev, [loadingKey]: true }));
+                setError(null);
+                try {
+                    const response = await authenticatedFetch(endpoint, options);
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'API call failed');
+                    return data;
+                } catch (e) {
+                    setError(e.message);
+                    setTimeout(() => setError(null), 5000);
+                } finally {
+                    setLoading(prev => ({ ...prev, [loadingKey]: false }));
+                }
+            };
+
+            const fetchAirQuality = async () => {
+                const data = await handleApiCall('/api/wellness/air-quality', { method: 'GET' }, 'air');
+                if (data) setAirQuality(data);
+            };
+
+            const fetchNoise = async () => {
+                const data = await handleApiCall('/api/wellness/noise-levels', { method: 'GET' }, 'noise');
+                if (data) setNoise(data);
+            };
+
+            const checkErgonomics = async () => {
+                const data = await handleApiCall('/api/wellness/ergonomics/check', { method: 'GET' }, 'ergo');
+                if (data) setErgonomics(data);
+            };
+
+            const handleCheckinSubmit = async (e) => {
+                e.preventDefault();
+                const data = await handleApiCall('/api/wellness/checkin', { method: 'POST', body: JSON.stringify(checkin) }, 'checkin');
+                if (data) {
+                    let finalMessage = data.message;
+                    if (data.advice && data.advice.length > 0) {
+                        finalMessage += ` Advice: ${data.advice.join(' ')}`;
+                    }
+                    if (data.support_resources && Object.keys(data.support_resources).length > 0) {
+                        finalMessage += ' We noticed you might need some extra support. Resources have been logged to the console for your privacy.';
+                        console.log("--- Suggested Support Resources ---");
+                        for (const [problem, resources] of Object.entries(data.support_resources)) {
+                            console.log(`For feeling ${problem}:`);
+                            resources.forEach(r => console.log(`- ${r}`));
+                        }
+                        console.log("------------------------------------");
+                    }
+                    setMessage(finalMessage);
+                    setTimeout(() => setMessage(null), 10000); // Longer timeout for more text
+                }
+            };
+
+            const handleMentalHealthSupport = async () => {
+                const data = await handleApiCall('/api/wellness/mental-health/support', { method: 'POST', body: JSON.stringify({ problem: 'general' }) }, 'mental');
+                if (data) {
+                    // Use the integrated notification system instead of a disruptive alert and log details to console for privacy.
+                    setMessage(`${data.message} Emergency contact: ${data.emergency}`);
+                    console.log("--- Mental Health Support Resources ---");
+                    data.help.forEach(resource => console.log(`- ${resource}`));
+                    console.log(`Emergency Contact: ${data.emergency}`);
+                    console.log("------------------------------------");
+                    setTimeout(() => setMessage(null), 8000);
+                }
+            };
+
+            const CyberButtonInput = ({ label, value, onChange }) => (
+                <div>
+                    <label className="block text-fuchsia-300 mb-1 capitalize">{label} ({value})</label>
+                    <div className="flex justify-between items-center space-x-1 bg-black/20 p-1 rounded-md border border-fuchsia-900">
+                        {Array.from({ length: 10 }, (_, i) => i + 1).map(level => (
+                            <button
+                                key={level}
+                                type="button"
+                                onClick={() => onChange(level)}
+                                className={`h-8 flex-1 rounded-sm transition-all duration-150 ${
+                                    value >= level ? 'bg-fuchsia-500 shadow-[0_0_10px_#d946ef]' : 'bg-fuchsia-800/30 hover:bg-fuchsia-700/50'
+                                }`}
+                            />
+                        ))}
+                    </div>
+                </div>
+            );
+
+            const VitalsCard = ({ title, data, onRefresh, loading, children }) => (
+                <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow">
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-xl font-semibold text-cyan-400">{title}</h3>
+                        <button onClick={onRefresh} disabled={loading} className="text-cyan-400 hover:text-white disabled:opacity-50 text-2xl">↻</button>
+                    </div>
+                    {loading ? <Spinner /> : data ? children(data) : <p className="text-gray-500">Click refresh to load data.</p>}
+                </div>
+            );
+
+            return (
+                <div className="w-full h-full relative pb-12">
+                    <h2 className="text-4xl md:text-5xl font-bold text-emerald-400 mb-8 text-center" style={{animation: 'text-green-glow-pulse 5s infinite ease-in-out'}}>Wellness Hub</h2>
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-auto max-w-3xl text-center space-y-2 z-20">
+                        {error && <div className="bg-red-900/80 border border-red-500 text-red-300 px-4 py-2 rounded-lg inline-block" role="alert">{error}</div>}
+                        {message && <div className="bg-green-900/80 border border-green-500 text-green-300 px-4 py-2 rounded-lg inline-block" role="alert">{message}</div>}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <VitalsCard title="Air Quality" data={airQuality} onRefresh={fetchAirQuality} loading={loading.air}>
+                            {d => <p>CO₂: {d.co2} ppm, Temp: {d.temperature}°C, Humidity: {d.humidity}% <br/>Status: <span className="font-bold">{d.status}</span></p>}
+                        </VitalsCard>
+                        <VitalsCard title="Noise Level" data={noise} onRefresh={fetchNoise} loading={loading.noise}>
+                            {d => <p>Level: {d.noise_db} dB <br/>Status: <span className="font-bold">{d.status}</span></p>}
+                        </VitalsCard>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                        <div className="space-y-6">
+                            <div className="bg-black/30 p-4 rounded-xl border border-fuchsia-500/30 shadow-fuchsia-glow">
+                                <h3 className="text-2xl font-semibold text-fuchsia-400 mb-4">Daily Check-in</h3>
+                                <form onSubmit={handleCheckinSubmit} className="space-y-4">
+                                    <CyberButtonInput label="Mood" value={checkin.mood} onChange={val => setCheckin({...checkin, mood: val})} />
+                                    <CyberButtonInput label="Energy" value={checkin.energy} onChange={val => setCheckin({...checkin, energy: val})} />
+                                    <CyberButtonInput label="Stress" value={checkin.stress} onChange={val => setCheckin({...checkin, stress: val})} />
+                                    <button type="submit" disabled={loading.checkin} className="w-full flex justify-center items-center gap-2 bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black disabled:opacity-50">
+                                        {loading.checkin ? <><Spinner />Submitting...</> : 'Submit Check-in'}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div className="space-y-6">
+                            <div className="bg-black/30 p-4 rounded-xl border border-cyan-500/30 shadow-cyan-glow">
+                                <h3 className="text-xl font-semibold text-cyan-400 mb-3">Ergonomics & Breaks</h3>
+                                <button onClick={checkErgonomics} disabled={loading.ergo} className="w-full mb-3 bg-transparent border-2 border-cyan-400 text-cyan-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-cyan-400 hover:text-black">Check My Ergonomics</button>
+                                {ergonomics && <div><p className="font-bold">Results:</p><ul className="list-disc list-inside text-cyan-300">{ergonomics.problems.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
+                            </div>
+                            <div className="bg-black/30 p-4 rounded-xl border border-fuchsia-500/30 shadow-fuchsia-glow">
+                                <h3 className="text-xl font-semibold text-fuchsia-400 mb-3">Mental Health Support</h3>
+                                <p className="text-gray-400 mb-3 text-sm">If you need to talk, resources are available. Click below for immediate, confidential support options.</p>
+                                <button onClick={handleMentalHealthSupport} className="w-full bg-fuchsia-600/80 text-white font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-fuchsia-500">Request Support</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // --- Status Line Component ---
         const StatusLine = () => {
             const [climateStatus, setClimateStatus] = React.useState(null);
@@ -1348,6 +1512,8 @@
                         return <MeetingRoomsPanel currentUser={currentUser} />;
                     case 'automation':
                         return <AutomationPanel currentUser={currentUser} />;
+                    case 'wellness':
+                        return <WellnessPanel currentUser={currentUser} />;
                     case 'users':
                         return <UsersPanel currentUser={currentUser} />;
                     default:
@@ -1397,6 +1563,7 @@
                             <NavItem view="parking" label="Parking" icon="🅿️" />
                             <NavItem view="meetings" label="Meeting Rooms" icon="🤝" />
                             {/* Show automation tab to all, but functionality is restricted inside */}
+                            <NavItem view="wellness" label="Wellness" icon="❤️" />
                             <NavItem view="automation" label="Automation" icon="🤖" />
                             {currentUser.role === 'admin' && <NavItem view="users" label="Users" icon="👥" />}
                         </nav>
