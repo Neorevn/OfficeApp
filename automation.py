@@ -33,7 +33,6 @@ def create_automation_rule():
 
     db.automation_rules.insert_one(new_rule)
     logging.info(f"Automation: Created new rule: {new_rule}")
-    return json.loads(json_util.dumps(new_rule)), 201
     new_rule.pop('_id', None)
     return jsonify(new_rule), 201
 
@@ -56,7 +55,6 @@ def toggle_rule(rule_id):
     )
     logging.info(f"Automation: Toggled rule {rule_id} to {'active' if new_active_state else 'inactive'}.")
     rule['active'] = new_active_state
-    return json.loads(json_util.dumps(rule))
     rule.pop('_id', None)
     return jsonify(rule)
 
@@ -67,7 +65,7 @@ def delete_rule(rule_id):
     
     if result.deleted_count == 0:
         return jsonify({'error': 'Rule not found'}), 404
-        
+
     logging.info(f"Automation: Rule {rule_id} was deleted by an admin.")
     return jsonify({'status': 'success', 'message': f"Rule #{rule_id} has been deleted."})
 
@@ -98,46 +96,78 @@ def process_event(event_type, event_data={}):
         is_match = True
         # Check if all conditions in the rule are met by the event data
         for key, value in conditions.items():
-            event_value = event_data.get(key)
-            # Robust comparison to handle type mismatches (e.g., '14' vs 14)
-            if event_value is None:
-                is_match = False
-                break
-            try:
-                # Attempt to compare values of the same type
-                if type(event_value)(value) != event_value:
-                    is_match = False
-                    break
-            except (ValueError, TypeError):
+            # A simple, robust string comparison is sufficient and avoids type issues.
+            if str(event_data.get(key)) != str(value):
                 is_match = False
                 break
         if is_match:
-            action_type = rule.get('action', {}).get('type')
-            if action_type:
+            action = rule.get('action', {})
+            if action.get('type'):
                 source_description = f"rule #{rule['id']} ('{rule['description']}')"
-                _execute_automation_action(action_type, source_description)
+                _execute_automation_action(action, source_description, event_data)
                 triggered_count += 1
     
     if triggered_count > 0:
         logging.info(f"Automation: Event '{event_type}' triggered {triggered_count} rule(s).")
 
 
-# Actual rules
-def _execute_automation_action(action, source_description):
-    logging.info(f"Automation: {source_description} triggered action: '{action}'.")
-    if action == 'lights_on':
+# Action Handlers
+def _action_lights_on(params, event_data):
         db.state.update_one({'_id': 'office'}, {'$set': {'lights_on': True}})
         logging.info("Automation: Lights turned ON by rule.")
-    elif action == 'lights_off':
+
+def _action_lights_off(params, event_data):
         db.state.update_one({'_id': 'office'}, {'$set': {'lights_on': False}})
         logging.info("Automation: Lights turned OFF by rule.")
-    elif action == 'hvac_off':
+
+def _action_hvac_off(params, event_data):
         db.state.update_one({'_id': 'office'}, {'$set': {'hvac_mode': 'off'}})
         logging.info("Automation: HVAC turned OFF by rule.")
+
+def _action_reserve_parking(params, event_data):
+    spot_id = params.get('spot_id')
+    username = event_data.get('username')
+    if not spot_id or not username:
+        logging.warning(f"Automation: 'reserve_parking' action missing spot_id or username context.")
+        return
+
+    spot = db.parking_spots.find_one({'id': int(spot_id)})
+    if spot and spot.get('is_available'):
+        db.parking_spots.update_one({'id': int(spot_id)}, {'$set': {'is_available': False}})
+        db.reservations.insert_one({'id': int(spot_id), 'name': username})
+        logging.info(f"Automation: Reserved parking spot {spot_id} for '{username}' via rule.")
     else:
-        logging.warning(f"Automation: Unknown action '{action}' requested by {source_description}.")
-        return False 
-    return True
+        logging.warning(f"Automation: Could not reserve spot {spot_id} for '{username}'. Spot not found or not available.")
+
+def _action_clear_parking(params, event_data):
+    spot_id = params.get('spot_id')
+    if not spot_id:
+        logging.warning(f"Automation: 'clear_parking' action missing spot_id.")
+        return
+    spot_id = int(spot_id)
+    db.checkins.delete_one({'id': spot_id})
+    db.reservations.delete_many({'id': spot_id})
+    db.parking_spots.update_one({'id': spot_id}, {'$set': {'is_available': True}})
+    logging.info(f"Automation: Cleared parking spot {spot_id} via rule.")
+
+ACTION_HANDLERS = {
+    'lights_on': _action_lights_on,
+    'lights_off': _action_lights_off,
+    'hvac_off': _action_hvac_off,
+    'reserve_parking': _action_reserve_parking,
+    'clear_parking': _action_clear_parking,
+}
+
+def _execute_automation_action(action, source_description, event_data={}):
+    action_type = action.get('type')
+    action_params = action.get('parameters', {})
+    logging.info(f"Automation: {source_description} triggered action: '{action_type}' with params {action_params}.")
+    handler = ACTION_HANDLERS.get(action_type)
+    if handler:
+        handler(action_params, event_data)
+        return True
+    logging.warning(f"Automation: Unknown action '{action_type}' requested by {source_description}.")
+    return False
 
 @automation_bp.route('/api/automation/triggers/motion', methods=['POST'])
 def trigger_motion():
@@ -154,10 +184,10 @@ def test_rule(rule_id):
         return jsonify({'error': 'Rule not found'}), 404
     if not rule.get('active', True):
         return jsonify({'message': f"Rule {rule_id} is inactive. Test not run."}), 200
-    action = rule.get('action', {}).get('type')
+    action = rule.get('action', {})
     source_description = f"Test for rule #{rule_id}"
-    _execute_automation_action(action, source_description)
-    return jsonify({'message': f"Test triggered for rule #{rule_id}. Action '{action}' executed."}), 200
+    _execute_automation_action(action, source_description, {})
+    return jsonify({'message': f"Test triggered for rule #{rule_id}. Action '{action.get('type')}' executed."}), 200
 
 @automation_bp.route('/api/automation/energy-savings', methods=['GET'])
 @token_required

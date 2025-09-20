@@ -704,6 +704,7 @@
             const [triggerConditionKey, setTriggerConditionKey] = React.useState('area');
             const [triggerConditionValue, setTriggerConditionValue] = React.useState('main_office');
             const [actionType, setActionType] = React.useState('lights_on');
+            const [actionParams, setActionParams] = React.useState({});
             const [error, setError] = React.useState(null);
 
             React.useEffect(() => {
@@ -719,6 +720,13 @@
                 };
                 fetchUsers();
             }, []);
+
+            const handleActionChange = (e) => {
+                const newAction = e.target.value;
+                setActionType(newAction);
+                // Reset params when action changes
+                setActionParams({});
+            };
 
             const handleTriggerChange = (e) => {
                 const newTrigger = e.target.value;
@@ -740,7 +748,10 @@
             };
 
             const generateDescription = () => {
-                const actionText = actionType.replace('_', ' ');
+                let actionText = actionType.replace(/_/g, ' ');
+                if (actionParams.spot_id) {
+                    actionText += ` for spot ${actionParams.spot_id}`;
+                }
                 if (triggerType === 'motion') return `When motion is detected in '${triggerConditionValue}', ${actionText}.`;
                 if (triggerType === 'user_login') return `When user '${triggerConditionValue}' logs in, ${actionText}.`;
                 if (triggerType === 'parking_checkin') return `When someone checks into parking spot ${triggerConditionValue}, ${actionText}.`;
@@ -753,7 +764,7 @@
 
                 const rule = {
                     trigger: { type: triggerType, condition: { [triggerConditionKey]: triggerConditionValue } },
-                    action: { type: actionType },
+                    action: { type: actionType, parameters: actionParams },
                     description: generateDescription()
                 };
 
@@ -781,14 +792,43 @@
                 return <input type="text" value={triggerConditionValue} onChange={e => setTriggerConditionValue(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400" />;
             };
 
+            const renderActionParamsInput = () => {
+                if (actionType === 'reserve_parking' || actionType === 'clear_parking') {
+                    return (
+                        <div>
+                            <label className="block text-fuchsia-300 mb-1 text-sm">Spot ID</label>
+                            <input 
+                                type="number" 
+                                value={actionParams.spot_id || ''} 
+                                onChange={e => setActionParams({ ...actionParams, spot_id: e.target.value })}
+                                className="w-full p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"
+                                placeholder="e.g., 1"
+                                required
+                            />
+                        </div>
+                    );
+                }
+                return <div />; // Return an empty div to maintain grid layout
+            };
+
             return (
                 <div className="bg-black/30 p-4 rounded-xl border border-fuchsia-500/30 shadow-fuchsia-glow mb-6">
                     <h3 className="text-2xl font-semibold text-fuchsia-400 mb-4">Create New Automation Rule</h3>
-                    <form onSubmit={handleCreateRule} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end text-white">
-                        <select value={triggerType} onChange={handleTriggerChange} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="motion">Motion Detected</option><option value="user_login">User Logs In</option><option value="parking_checkin">Parking Check-in</option><option value="time">Time of Day</option></select>
-                        {renderConditionInput()}
-                        <select value={actionType} onChange={e => setActionType(e.target.value)} className="p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="lights_on">Turn Lights On</option><option value="lights_off">Turn Lights Off</option><option value="hvac_off">Turn HVAC Off</option></select>
-                        <button type="submit" className="bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black">Create Rule</button>
+                    <form onSubmit={handleCreateRule} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end text-white">
+                        <div>
+                            <label className="block text-fuchsia-300 mb-1 text-sm">Trigger</label>
+                            <select value={triggerType} onChange={handleTriggerChange} className="w-full p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="motion">Motion Detected</option><option value="user_login">User Logs In</option><option value="parking_checkin">Parking Check-in</option><option value="time">Time of Day</option></select>
+                        </div>
+                        <div>
+                            <label className="block text-fuchsia-300 mb-1 text-sm">Condition</label>
+                            {renderConditionInput()}
+                        </div>
+                        <div>
+                            <label className="block text-fuchsia-300 mb-1 text-sm">Action</label>
+                            <select value={actionType} onChange={handleActionChange} className="w-full p-2 bg-gray-900/50 border-2 border-gray-600 rounded-md focus:border-fuchsia-400"><option value="lights_on">Turn Lights On</option><option value="lights_off">Turn Lights Off</option><option value="hvac_off">Turn HVAC Off</option><option value="reserve_parking">Reserve Parking</option><option value="clear_parking">Clear Parking</option></select>
+                        </div>
+                        {renderActionParamsInput()}
+                        <button type="submit" className="bg-transparent border-2 border-fuchsia-400 text-fuchsia-400 font-bold py-2 px-4 rounded-md transition-all duration-300 hover:bg-fuchsia-400 hover:text-black self-end h-11">Create Rule</button>
                     </form>
                     {error && <p className="text-red-400 mt-2">{error}</p>}
                 </div>
@@ -1089,28 +1129,26 @@
             const roomMap = React.useMemo(() => new Map(rooms.map(room => [room.id, room])), [rooms]);
             const bookingsByDay = React.useMemo(() => {
                  const grouped = Array.from({length: 5}, () => []);
-                 if (!Array.isArray(bookings)) return grouped;
-         
+                 if (!Array.isArray(bookings) || !currentWeekStart) return grouped;
+
+                 const weekStartMs = currentWeekStart.getTime();
+
                  bookings.forEach(booking => {
-                     // Ensure booking and start_time exist and create a valid date.
-                     if (!booking || !booking.start_time) return;
-                     const startDate = new Date(booking.start_time);
-                     if (isNaN(startDate.getTime())) {
-                         return;
-                     }
-         
-                     const dayOfWeek = startDate.getDay(); // 0=Sun, 1=Mon, ..., 4=Thu
-         
-                     // Ensure dayIndex is valid before pushing
-                     if (dayOfWeek >= 0 && dayOfWeek < 5) { // Sunday (0) to Thursday (4)
-                         const dayIndex = dayOfWeek;
-                         grouped[dayIndex].push(booking);
-                     }
-                 });
-         
+                    if (!booking || !booking.start_time) return;
+                    const startDate = new Date(booking.start_time);
+                    if (isNaN(startDate.getTime())) return;
+
+                    // Calculate the difference in days from the start of the currently viewed week.
+                    const dayIndex = Math.floor((startDate.getTime() - weekStartMs) / (1000 * 60 * 60 * 24));
+
+                    // Only add the booking if it falls within the 5-day view (Sunday to Thursday).
+                    if (dayIndex >= 0 && dayIndex < 5) {
+                        grouped[dayIndex].push(booking);
+                    }
+                });
                  grouped.forEach(day => day.sort((a, b) => new Date(a.start_time) - new Date(b.start_time)));
                  return grouped;
-            }, [bookings]); // Semicolon was missing here, causing a syntax error
+            }, [bookings, currentWeekStart]);
 
             // --- Color mapping for rooms ---
             const roomColors = [

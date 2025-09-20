@@ -3,8 +3,8 @@ from flask_cors import CORS
 import logging
 import os
 from werkzeug.security import generate_password_hash
-from dotenv import load_dotenv
-from datetime import datetime
+from dotenv import load_dotenv, find_dotenv
+from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from climate import climate_bp
 from database import db
@@ -13,7 +13,7 @@ from automation import automation_bp, process_event
 from auth import auth_bp
 from meeting_rooms import meeting_rooms_bp
 
-# Load environment variables from .env file at the very beginning
+# Load environment variables from .env file.
 load_dotenv()
 
 
@@ -86,12 +86,6 @@ def initialize_database():
 
     logging.info("Application: Database initialization check complete.")
 
-# Timer job to trigger automation events
-def time_trigger_job():
-    with app.app_context():
-        current_time = datetime.now().strftime("%H:%M")
-        process_event('time', {'time': current_time})
-
 def create_app():
     app = Flask(__name__, static_folder='.', static_url_path='')
     CORS(app)
@@ -120,9 +114,38 @@ def create_app():
     # Respods to health checks from index.html
     @app.route('/health')
     def health_check():
-        logging.warning("Application: Health check successful.")
         logging.info("Application: Health check successful.")
         return jsonify({"status": "OK"}), 200
+
+    # Route to serve the favicon and prevent 404 errors in browser logs
+    @app.route('/favicon.ico')
+    def favicon():
+        return app.send_static_file('static/logo.png')
+
+    # --- Scheduler Setup ---
+    # We define the jobs here so they have access to the 'app' context.
+    def time_trigger_job():
+        """Fires every minute to trigger time-based automations."""
+        with app.app_context():
+            current_time = datetime.now().strftime("%H:%M")
+            process_event('time', {'time': current_time})
+
+    def cleanup_old_bookings_job():
+        """Removes meeting room bookings that have already ended."""
+        with app.app_context():
+            now = datetime.now(timezone.utc)
+            result = db.meeting_bookings.delete_many({'end_time': {'$lt': now}})
+            if result.deleted_count > 0:
+                logging.info(f"Scheduler: Cleaned up {result.deleted_count} old meeting room booking(s).")
+
+    # Initialize and start the scheduler only if it's not already running
+    # This check is important to prevent the scheduler from running multiple times in debug mode.
+    if not app.config.get('SCHEDULER_RUNNING'):
+        scheduler = BackgroundScheduler(daemon=True)
+        scheduler.add_job(time_trigger_job, 'cron', minute='*')
+        scheduler.add_job(cleanup_old_bookings_job, 'cron', hour='*')
+        scheduler.start()
+        app.config['SCHEDULER_RUNNING'] = True
 
     return app
 
@@ -130,11 +153,6 @@ if __name__ == '__main__':
     app = create_app()
     with app.app_context():
         initialize_database()
-
-    # Initialize and start the scheduler
-    scheduler = BackgroundScheduler(daemon=True)
-    scheduler.add_job(time_trigger_job, 'cron', minute='*')
-    scheduler.start()
     
     logging.warning("Application: Starting Officer application on port 5000...")    
     # Use debug=False to prevent the app from running twice (which duplicates scheduler jobs)

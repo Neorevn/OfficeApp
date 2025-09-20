@@ -48,6 +48,9 @@ auth_bp = Blueprint('auth_bp', __name__)
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():
+    # Import here to avoid circular dependency with automation.py
+    from automation import process_event
+
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data:
         return jsonify({'error': 'Missing username or password'}), 400
@@ -59,6 +62,9 @@ def login():
         return jsonify({'error': 'Invalid username or password'}), 401
     
     logging.info(f"Auth: User '{user['username']}' logged in successfully.")
+
+    # Trigger automation event for user login
+    process_event('user_login', {'username': user['username']})
     
     # Create JWT
     token = jwt.encode({

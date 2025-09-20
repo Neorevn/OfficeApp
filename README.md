@@ -141,43 +141,33 @@ You can run the application either locally using Python or containerized with Do
 
 #### Option A: Running with Docker (Recommended)
 
-This is the easiest and most consistent way to run the application.
+This is the easiest way to run the application in a containerized environment.
 
-1.  **Build the Docker image:**
+1.  **Build and run the services:**
+    This single command builds the image and starts the Flask server. The server will connect to the cloud database you configured in your `.env` file.
     ```sh
-    docker build -t officer-app .
+    docker compose up --build
+    ```
+2.  To stop the services, press `Ctrl+C` and then run:
+    ```sh
+    docker compose down
     ```
 
-2.  **Run the container:**
-    This command maps port 5000 and securely passes your `.env` file to the container.
-    ```sh
-    docker run -p 5000:5000 --env-file ./.env officer-app
-    ```
-
-##### Development with Docker
-To avoid rebuilding the image on every code change, you can use a bind mount to sync your local code into the container. This allows you to see updates by simply restarting the container.
-
-###### Using the Command Line (CLI)
-1.  **Start the container with a bind mount:**
-    ```sh
-    # We give it a name for easy restarts
-    docker run --name officer-dev -p 5000:5000 --env-file ./.env -v .:/app officer-app
-    ```
-2.  **Make code changes** on your local machine.
-3.  **Restart the container** to apply the changes (this is much faster than rebuilding):
-    ```sh
-    docker restart officer-dev
-    ```
+Because the `compose.yaml` is configured with a volume mount, any changes you make to the Python code on your local machine will be reflected inside the container. Simply restart the container to apply them:
+`docker compose restart server`
 
 ###### Using the Docker Desktop GUI
+
+**Note:** This method requires manual configuration each time you create a container. Using the `docker compose up` command line method above is recommended as it automates these steps.
+
 1.  Go to the **Images** tab in Docker Desktop.
 2.  Find your `officer-app` image and click the **Run** button.
 3.  In the "Create new container" screen, click **Optional settings**.
 4.  Configure the following:
     - **Container name**: Give it a memorable name, like `officer-dev-gui`.
     - **Ports**: Set the "Host port" to `5000`.
-    - **Volumes**: For "Host path", browse to your project folder. For "Container path", enter `/app`.
-    - **Environment variables**: Write both Varible Names taken from `.env` and Values in their respective fields. `MONGO_URI` and `SECRET_KEY`.
+    - **Volumes**: For "Host path", browse to your project folder. For "Container path", enter `/app`. This syncs your local code into the container.
+    - **Environment variables**: Manually add two variables: `MONGO_URI` and `SECRET_KEY`, copying the values from your `.env` file.
 5.  Click **Run**.
 6.  To apply code changes, go to the **Containers** tab and click the **Restart** button on your running container.
 
@@ -201,3 +191,14 @@ Once the application is running, open your browser and navigate to **`http://loc
 You should see the "Officer" login screen. You can log in with one of the default accounts:
 -   **Admin**: `admin1` / `adminpass1`
 -   **User**: `user1` / `userpass1`
+
+### 🤔 Troubleshooting
+
+- **Error: `MONGO_URI environment variable not set`**
+
+  This is the most common startup error. It means the application container could not find the database connection string.
+
+  1.  **Check the `.env` file name**: Ensure the file is named exactly `.env` (with the leading dot) and not `.env.txt`.
+  2.  **Check the file location**: The `.env` file must be in the root of the `OfficeApp` project directory, next to `compose.yaml`.
+  3.  **Check the file content**: The file must contain the `MONGO_URI` and `SECRET_KEY` variables, with no extra spaces or quotes. Copy the example from step 1 exactly.
+  4.  **Restart Docker Compose**: If you made changes, stop the containers with `docker compose down` and start them again with `docker compose up --build`.
