@@ -83,19 +83,26 @@ This project follows a monolithic backend architecture with a modular design, se
 The repository is organized to keep the frontend, backend modules, and configuration separate and easy to navigate.
 
 ```
-OfficeApp/
-├── .env                # Local environment variables (e.g., MONGO_URI) - (You create this)
-├── README.md           # This file
-├── requirements.txt    # Python backend dependencies
-├── index.html          # The single-page React frontend
-├── main.py             # Main Flask application entry point and initializer
-├── database.py         # MongoDB connection and setup
-├── auth.py             # Handles user authentication and management API
-├── climate.py          # Handles environmental controls API
-├── parking.py          # Handles parking management API
-├── automation.py       # Handles automation rules and events API
-├── meeting_rooms.py    # Handles meeting room booking API
-└── wellnes.py          # Handles wellness and office vitality API
+OfficeApp/ 
+├── .env # Local environment variables (You create this) 
+├── README.md # This file 
+├── compose.yaml # Docker Compose configuration 
+├── requirements.txt # Python backend dependencies 
+├── main.py # Main Flask application entry point
+
+├── backend/ # Flask backend modules
+├── database.py # MongoDB connection setup 
+├── auth.py # Auth module (Blueprint) 
+├── climate.py # Climate module (Blueprint) 
+├── parking.py # Parking module (Blueprint) 
+├── automation.py # Automation module (Blueprint) 
+├── meeting_rooms.py # Meeting Rooms module (Blueprint) 
+├── wellness.py # Wellness module (Blueprint) 
+
+├── frontend/ # React + Vite Single-Page Application
+├── index.html # HTML entry point for Vite
+├── package.json # Frontend dependencies and scripts
+└── src/ # React source code (components, hooks, etc.)
 ```
 
 ## 🛠️ Tech Stack
